@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NanoPlay IoT — ESP32 Gaming Console</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, onValue, query, orderByChild, limitToLast, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getDatabase as gDB, ref as dbRef, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey:            "AIzaSyBa6WnpfRgRsswU2eRS3l1uUoHnG7s29bs",
+      authDomain:        "nano-77265.firebaseapp.com",
+      databaseURL:       "https://nano-77265-default-rtdb.firebaseio.com",
+      projectId:         "nano-77265",
+      storageBucket:     "nano-77265.firebasestorage.app",
+      messagingSenderId: "655059507386",
+      appId:             "1:655059507386:web:03aab2b8c413c3a0458a83",
+      measurementId:     "G-YW7GBKC8QW"
+    };
+
+    const app  = initializeApp(firebaseConfig);
+    const db   = getDatabase(app);
+    const auth = getAuth(app);
+
+    window._fb = { db, auth, ref, onValue, query, orderByChild, limitToLast, get, dbRef, set,
+                   signInWithEmailAndPassword, createUserWithEmailAndPassword,
+                   signOut, onAuthStateChanged, updateProfile };
+    window.dispatchEvent(new Event('firebase-ready'));
+  </script>
+
+  <style>
+    :root{--p:#9d4edd;--b:#00f5ff;--pk:#ff006e;--g:#39ff14;--o:#ff9e00;--y:#fff01f;--bg:#0a0a1a;--bg2:#050510;--card:#1a1a3a;--t:#fff;--t2:#b8b8d0;}
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+    html{scroll-behavior:smooth;}
+    body{font-family:'Rajdhani',sans-serif;background:var(--bg);color:var(--t);overflow-x:hidden;line-height:1.6;}
+    body::before{content:"";position:fixed;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.12) 1px,transparent 2px);pointer-events:none;z-index:9999;}
+    ::-webkit-scrollbar{width:6px;} ::-webkit-scrollbar-track{background:var(--bg2);} ::-webkit-scrollbar-thumb{background:var(--p);border-radius:3px;}
+
+    /* SPLASH */
+    #splash{position:fixed;inset:0;z-index:99999;background:var(--bg2);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .7s,visibility .7s;}
+    #splash.hide{opacity:0;visibility:hidden;pointer-events:none;}
+    #splash::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.15) 1px,transparent 2px);pointer-events:none;}
+    #splash::after{content:"";position:absolute;inset:20px;border:1px solid rgba(157,78,221,.2);border-radius:8px;pointer-events:none;}
+    .sc{position:absolute;width:20px;height:20px;border-color:var(--p);border-style:solid;}
+    .sc.tl{top:24px;left:24px;border-width:2px 0 0 2px} .sc.tr{top:24px;right:24px;border-width:2px 2px 0 0}
+    .sc.bl{bottom:24px;left:24px;border-width:0 0 2px 2px} .sc.br{bottom:24px;right:24px;border-width:0 2px 2px 0}
+    .srow{display:flex;align-items:center;gap:18px;animation:pop .7s cubic-bezier(.34,1.56,.64,1) both;}
+    .slogo{height:72px;width:auto;object-fit:contain;filter:drop-shadow(0 0 20px var(--p));}
+    .stitle{font-family:'Press Start 2P',cursive;font-size:2rem;font-weight:900;background:linear-gradient(90deg,var(--b),var(--pk),var(--p));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+    .ssub{font-family:'Orbitron',sans-serif;font-size:.75rem;color:var(--t2);letter-spacing:4px;text-transform:uppercase;margin-top:.6rem;animation:up .6s .5s ease both;}
+    .steam{font-family:'Orbitron',sans-serif;font-size:.65rem;color:var(--p);letter-spacing:2px;margin-top:2.5rem;animation:up .6s .7s ease both;}
+    .sbar-w{width:220px;height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;margin-top:1rem;animation:up .4s .6s ease both;}
+    .sbar{height:100%;width:0;background:linear-gradient(90deg,var(--b),var(--p));border-radius:3px;animation:bar 2s .4s ease forwards;}
+    .sdot{position:absolute;border-radius:50%;opacity:.4;animation:df linear infinite;}
+    @keyframes pop{from{opacity:0;transform:scale(.5) rotate(-10deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+    @keyframes up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes bar{to{width:100%}}
+    @keyframes df{0%{transform:translateY(0) scale(1);opacity:.4}50%{transform:translateY(-30px) scale(1.3);opacity:.7}100%{transform:translateY(0) scale(1);opacity:.4}}
+    @keyframes heroGlow{0%,100%{text-shadow:4px 4px 0 var(--pk),0 0 30px rgba(255,240,31,.4)}50%{text-shadow:4px 4px 0 var(--pk),0 0 60px rgba(255,240,31,.8)}}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+    @keyframes glow{0%,100%{box-shadow:0 0 18px rgba(157,78,221,.35)}50%{box-shadow:0 0 38px rgba(157,78,221,.65)}}
+    @keyframes sIn{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes mIn{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
+    @keyframes fpf{0%{transform:translateY(100vh);opacity:0}10%{opacity:.6}90%{opacity:.4}100%{transform:translateY(-20px) translateX(40px);opacity:0}}
+
+    /* HEADER */
+    header{background:linear-gradient(135deg,var(--bg2),var(--card));padding:1rem 2rem;position:fixed;width:100%;top:0;z-index:1000;border-bottom:3px solid var(--p);box-shadow:0 0 30px rgba(157,78,221,.3);transition:background .3s;}
+    .hc{max-width:1400px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;}
+    .logo{display:flex;align-items:center;gap:12px;cursor:pointer;}
+    .logo img{height:44px;width:auto;filter:drop-shadow(0 0 8px var(--p));transition:transform .3s,filter .3s;}
+    .logo img:hover{transform:scale(1.1);filter:drop-shadow(0 0 16px var(--b));}
+    .brand{font-family:'Orbitron',sans-serif;font-size:1.8rem;font-weight:900;background:linear-gradient(90deg,var(--b),var(--pk),var(--p));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+    nav ul{display:flex;list-style:none;gap:1.5rem;}
+    nav a{color:var(--t);text-decoration:none;font-family:'Orbitron',sans-serif;font-size:.78rem;font-weight:600;padding:.4rem .9rem;border:2px solid transparent;border-radius:5px;transition:all .3s;text-transform:uppercase;}
+    nav a:hover{border-color:var(--b);background:rgba(0,245,255,.08);color:var(--b);}
+    .auth{display:flex;gap:.8rem;align-items:center;}
+    #ubadge{font-family:'Orbitron',sans-serif;font-size:.72rem;color:var(--y);padding:.3rem .8rem;border:1px solid var(--y);border-radius:20px;display:none;}
+
+    /* BUTTONS */
+    .btn{padding:.65rem 1.4rem;border:none;border-radius:6px;font-family:'Orbitron',sans-serif;font-size:.8rem;font-weight:700;cursor:pointer;transition:all .3s;text-transform:uppercase;letter-spacing:.5px;}
+    .btn-p{background:linear-gradient(135deg,var(--p),var(--pk));color:#fff;box-shadow:0 0 18px rgba(157,78,221,.4);}
+    .btn-p:hover{transform:translateY(-2px);box-shadow:0 0 28px rgba(157,78,221,.65);}
+    .btn-s{background:transparent;border:2px solid var(--b);color:var(--b);}
+    .btn-s:hover{background:var(--b);color:var(--bg);}
+    .btn-lg{padding:1rem 2.5rem;font-size:.95rem;}
+    .btn-d{background:linear-gradient(135deg,#e63946,#c1121f);color:#fff;}
+    .btn-g{width:100%;padding:.8rem;margin-top:1rem;background:linear-gradient(135deg,var(--p),var(--b));color:#fff;border:none;border-radius:8px;font-family:'Orbitron',sans-serif;font-size:.8rem;font-weight:700;cursor:pointer;transition:all .3s;text-transform:uppercase;}
+    .btn-g:hover{transform:translateY(-3px);box-shadow:0 8px 25px rgba(0,245,255,.35);}
+
+    /* HERO */
+    .hero{margin-top:90px;padding:5rem 2rem;background:linear-gradient(180deg,var(--bg2),var(--bg));text-align:center;position:relative;overflow:hidden;}
+    .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 20% 50%,rgba(157,78,221,.18) 0%,transparent 50%),radial-gradient(circle at 80% 50%,rgba(0,245,255,.18) 0%,transparent 50%);}
+    .fp{position:absolute;width:4px;height:4px;border-radius:50%;animation:fpf linear infinite;opacity:.5;}
+    .hcont{position:relative;z-index:1;max-width:1000px;margin:0 auto;}
+    .hero h1{font-family:'Press Start 2P',cursive;font-size:2.2rem;margin-bottom:1.5rem;color:var(--y);line-height:1.5;animation:heroGlow 3s ease-in-out infinite;}
+    .hero p{font-size:1.25rem;color:var(--t2);margin-bottom:2rem;max-width:680px;margin-inline:auto;}
+    .stats{display:flex;justify-content:center;gap:2.5rem;margin:3rem 0;flex-wrap:wrap;}
+    .stat{background:var(--card);padding:1.4rem 2.2rem;border-radius:12px;border:2px solid var(--p);box-shadow:0 0 22px rgba(157,78,221,.28);transition:transform .3s;}
+    .stat:hover{transform:translateY(-4px);}
+    .snum{font-family:'Orbitron',sans-serif;font-size:2.2rem;font-weight:900;color:var(--b);display:block;}
+    .slbl{font-size:.85rem;color:var(--t2);text-transform:uppercase;letter-spacing:2px;}
+    .hbtns{display:flex;justify-content:center;gap:1.5rem;flex-wrap:wrap;}
+
+    /* SECTION */
+    .stitle{font-family:'Press Start 2P',cursive;font-size:1.6rem;text-align:center;margin-bottom:.8rem;color:var(--g);text-shadow:0 0 20px rgba(57,255,20,.5);}
+    .ssub2{text-align:center;color:var(--t2);margin-bottom:3rem;font-size:1.05rem;}
+
+    /* GAMES */
+    .gsec{padding:5rem 2rem;background:var(--bg);}
+    .ggrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:2rem;max-width:1400px;margin:0 auto;}
+    .gc{background:var(--card);border-radius:16px;overflow:hidden;border:2px solid rgba(255,255,255,.06);transition:all .4s;position:relative;cursor:pointer;}
+    .gc::before{content:"";position:absolute;inset:0;opacity:0;transition:opacity .4s;background:linear-gradient(135deg,rgba(0,245,255,.06),rgba(157,78,221,.06));pointer-events:none;z-index:0;}
+    .gc:hover{transform:translateY(-10px);}
+    .gc:hover::before{opacity:1;}
+    .gc.fl:hover{border-color:var(--g);box-shadow:0 20px 50px rgba(0,0,0,.5),0 0 40px rgba(57,255,20,.2);}
+    .gc.po:hover{border-color:var(--pk);box-shadow:0 20px 50px rgba(0,0,0,.5),0 0 40px rgba(255,0,110,.2);}
+    .gc.di:hover{border-color:var(--o);box-shadow:0 20px 50px rgba(0,0,0,.5),0 0 40px rgba(255,158,0,.2);}
+    .gc.sp:hover{border-color:var(--p);box-shadow:0 20px 50px rgba(0,0,0,.5),0 0 40px rgba(157,78,221,.2);}
+    .gc.mz:hover{border-color:var(--y);box-shadow:0 20px 50px rgba(0,0,0,.5),0 0 40px rgba(255,240,31,.2);}
+    .gc.br:hover{border-color:var(--b);box-shadow:0 20px 50px rgba(0,0,0,.5),0 0 40px rgba(0,245,255,.2);}
+    .gprev{height:170px;position:relative;overflow:hidden;background:var(--bg2);display:flex;align-items:center;justify-content:center;}
+    .gprev canvas{display:block;image-rendering:pixelated;}
+    .gprev-lbl{position:absolute;bottom:8px;right:10px;font-family:'Press Start 2P',cursive;font-size:.5rem;color:rgba(255,255,255,.3);}
+    .pov{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);opacity:0;transition:opacity .3s;font-family:'Press Start 2P',cursive;font-size:.6rem;color:var(--b);}
+    .gc:hover .pov{opacity:1;}
+    .gi{padding:1.4rem;position:relative;z-index:1;}
+    .gtitle{font-family:'Orbitron',sans-serif;font-size:1.2rem;font-weight:700;margin-bottom:.4rem;}
+    .gdesc{color:var(--t2);font-size:.92rem;margin-bottom:.9rem;line-height:1.5;}
+    .gfeat{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.9rem;}
+    .ftag{background:rgba(157,78,221,.18);color:var(--p);padding:.25rem .65rem;border-radius:20px;font-size:.72rem;font-weight:600;border:1px solid rgba(157,78,221,.28);}
+    .gstats{display:flex;justify-content:space-between;padding-top:.9rem;border-top:1px solid rgba(255,255,255,.08);}
+    .gstat{text-align:center;}
+    .gsv{font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:700;color:var(--b);}
+    .gsl{font-size:.72rem;color:var(--t2);text-transform:uppercase;}
+    .ai{display:inline-flex;align-items:center;gap:5px;color:var(--g);font-size:.82rem;margin-bottom:.8rem;}
+    .ad{width:7px;height:7px;background:var(--g);border-radius:50%;animation:pulse 2s infinite;}
+
+    /* GAME MODAL */
+    .gmodal{display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,10,.92);backdrop-filter:blur(12px);align-items:center;justify-content:center;padding:1rem;}
+    .gmodal.active{display:flex;animation:mIn .35s cubic-bezier(.34,1.56,.64,1);}
+    .gmi{background:var(--card);border-radius:22px;max-width:960px;width:100%;border:2px solid var(--gmc,var(--p));box-shadow:0 0 60px rgba(157,78,221,.35);overflow:hidden;position:relative;max-height:90vh;overflow-y:auto;}
+    .gmh{background:linear-gradient(135deg,var(--bg2),var(--card));padding:1.8rem 2rem 1.4rem;border-bottom:2px solid rgba(157,78,221,.3);display:flex;align-items:center;justify-content:space-between;}
+    .gmhl{display:flex;align-items:center;gap:1rem;}
+    .gme{font-size:2.8rem;}
+    .gmt{font-family:'Press Start 2P',cursive;font-size:1.1rem;color:var(--gmc,var(--b));line-height:1.4;}
+    .gms{font-size:.95rem;color:var(--t2);margin-top:.3rem;}
+    .gmc2{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:var(--t2);width:36px;height:36px;border-radius:50%;font-size:1.2rem;cursor:pointer;transition:all .2s;flex-shrink:0;}
+    .gmc2:hover{background:var(--pk);color:#fff;}
+    .gmb{display:grid;grid-template-columns:1fr 1fr;gap:0;}
+    .gml{background:var(--bg2);padding:2rem;display:flex;flex-direction:column;align-items:center;gap:1rem;border-right:1px solid rgba(255,255,255,.07);}
+    .gmcw{border:2px solid rgba(157,78,221,.6);border-radius:10px;overflow:hidden;box-shadow:0 0 30px rgba(157,78,221,.3);}
+    .gmcw canvas{display:block;image-rendering:pixelated;}
+    .gmsl{font-family:'Press Start 2P',cursive;font-size:.5rem;color:rgba(255,255,255,.3);text-align:center;}
+    .gmbg{display:inline-flex;align-items:center;gap:.4rem;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1);padding:.35rem .8rem;border-radius:20px;font-family:'Orbitron',sans-serif;font-size:.65rem;color:var(--t2);}
+    .od{width:8px;height:8px;background:var(--g);border-radius:50%;animation:pulse 1.5s infinite;}
+    .gmr{padding:2rem;display:flex;flex-direction:column;gap:1.4rem;}
+    .gmslbl{font-family:'Orbitron',sans-serif;font-size:.7rem;font-weight:700;color:var(--gmc,var(--b));text-transform:uppercase;letter-spacing:2px;margin-bottom:.5rem;}
+    .cgrid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;}
+    .ci{background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:.6rem .8rem;display:flex;align-items:center;gap:.6rem;}
+    .ck{font-family:'Press Start 2P',cursive;font-size:.55rem;background:rgba(0,245,255,.15);color:var(--b);border:1px solid rgba(0,245,255,.3);border-radius:4px;padding:.25rem .5rem;white-space:nowrap;flex-shrink:0;}
+    .cd{font-size:.82rem;color:var(--t2);}
+    .slist{display:flex;flex-direction:column;gap:.4rem;}
+    .si{display:flex;justify-content:space-between;align-items:center;font-size:.88rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.05);}
+    .si:last-child{border-bottom:none;}
+    .sv{font-family:'Orbitron',sans-serif;color:var(--g);font-size:.88rem;font-weight:700;}
+    .crm{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:1.2rem;}
+    .rcodem{background:var(--bg2);border:2px dashed var(--b);border-radius:8px;padding:.8rem 1rem;font-family:'Press Start 2P',cursive;font-size:1rem;color:var(--y);text-align:center;letter-spacing:6px;margin:.6rem 0;display:flex;align-items:center;justify-content:space-between;}
+    .mcopy{background:var(--b);color:var(--bg);border:none;padding:.3rem .7rem;border-radius:5px;font-family:'Orbitron',sans-serif;font-size:.6rem;font-weight:700;cursor:pointer;transition:all .2s;}
+    .mcopy:hover{background:var(--p);color:#fff;}
+    .rpi{display:flex;align-items:center;gap:.5rem;font-size:.85rem;color:var(--t2);padding:.3rem 0;}
+    .rpd{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+    .rpd.on{background:var(--g)} .rpd.off{background:rgba(255,255,255,.2)}
+    .rps{margin-left:auto;font-family:'Orbitron',sans-serif;font-size:.82rem;color:var(--b);}
+    .gmfb{display:flex;gap:.8rem;flex-wrap:wrap;}
+    .gmfb .btn{flex:1;min-width:120px;padding:.75rem .5rem;font-size:.72rem;}
+
+    /* LEADERBOARD */
+    .lbsec{padding:5rem 2rem;background:var(--bg);}
+    .lbc{max-width:1000px;margin:0 auto;}
+    .lbf{display:flex;justify-content:center;gap:.8rem;margin-bottom:2rem;flex-wrap:wrap;}
+    .fbtn{background:transparent;border:2px solid var(--p);color:var(--t);padding:.45rem 1.2rem;border-radius:25px;font-family:'Orbitron',sans-serif;font-size:.78rem;cursor:pointer;transition:all .3s;}
+    .fbtn.active,.fbtn:hover{background:var(--p);border-color:var(--p);}
+    .lbt{width:100%;background:var(--card);border-radius:15px;overflow:hidden;border:2px solid var(--b);border-collapse:collapse;}
+    .lbt th,.lbt td{padding:.9rem 1rem;text-align:left;border-bottom:1px solid rgba(255,255,255,.08);}
+    .lbt th{background:var(--bg2);font-family:'Orbitron',sans-serif;font-size:.8rem;text-transform:uppercase;letter-spacing:1px;color:var(--b);}
+    .lbt tr:hover{background:rgba(157,78,221,.1);}
+    .rb{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-family:'Orbitron',sans-serif;font-weight:700;font-size:.85rem;}
+    .r1{background:linear-gradient(135deg,#ffd700,#ffaa00);color:#000}
+    .r2{background:linear-gradient(135deg,#c0c0c0,#a0a0a0);color:#000}
+    .r3{background:linear-gradient(135deg,#cd7f32,#a0522d);color:#fff}
+    .ro{background:var(--p);color:#fff}
+    .sh{color:var(--g);font-weight:700;font-family:'Orbitron',sans-serif;}
+    .lr td{text-align:center;color:var(--t2);padding:2rem;}
+
+    /* MULTIPLAYER */
+    .mpsec{padding:5rem 2rem;background:linear-gradient(180deg,var(--bg),var(--bg2));}
+    .rmc{max-width:760px;margin:0 auto;background:var(--card);border-radius:20px;padding:2.5rem;border:3px solid var(--p);box-shadow:0 0 40px rgba(157,78,221,.3);}
+    .rmh{text-align:center;margin-bottom:2rem;}
+    .rcd{background:var(--bg2);padding:1.4rem;border-radius:10px;font-family:'Press Start 2P',cursive;font-size:1.4rem;color:var(--y);text-align:center;margin:1.4rem 0;border:2px dashed var(--b);letter-spacing:5px;display:flex;align-items:center;justify-content:center;gap:1rem;}
+    .cbtn{background:var(--b);color:var(--bg);padding:.4rem 1rem;border:none;border-radius:5px;font-family:'Orbitron',sans-serif;font-weight:700;cursor:pointer;transition:all .3s;font-size:.65rem;}
+    .cbtn:hover{background:var(--p);color:#fff;}
+    .pl{background:var(--bg2);border-radius:10px;padding:1.4rem;margin:1.4rem 0;}
+    .pi{display:flex;justify-content:space-between;align-items:center;padding:.65rem 0;border-bottom:1px solid rgba(255,255,255,.08);}
+    .pi:last-child{border-bottom:none;}
+    .pst{width:9px;height:9px;border-radius:50%;background:var(--g);display:inline-block;margin-right:7px;}
+    .pst.off{background:var(--t2);}
+    .ra{display:flex;gap:1rem;justify-content:center;margin-top:2rem;flex-wrap:wrap;}
+
+    /* SETUP */
+    .spsec{padding:5rem 2rem;background:var(--bg2);}
+    .sg{background:linear-gradient(135deg,rgba(0,245,255,.06),rgba(157,78,221,.06));border:2px solid var(--b);border-radius:15px;padding:2rem;margin:0 auto;max-width:800px;}
+    .sg h3{font-family:'Orbitron',sans-serif;color:var(--b);margin-bottom:1rem;}
+    .sg code{background:var(--bg2);color:var(--g);padding:.18rem .5rem;border-radius:4px;font-size:.82rem;font-family:monospace;}
+    .sg ol{padding-left:1.5rem;color:var(--t2);line-height:2.2;}
+
+    /* SPECS */
+    .specs{padding:5rem 2rem;background:linear-gradient(180deg,var(--bg2),var(--bg));}
+    .spg{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.8rem;max-width:1200px;margin:0 auto;}
+    .spc{background:var(--card);padding:1.8rem;border-radius:15px;text-align:center;border:2px solid var(--p);transition:all .3s;}
+    .spc:hover{transform:translateY(-5px);box-shadow:0 10px 30px rgba(157,78,221,.3);}
+    .spi{font-size:2.8rem;margin-bottom:.8rem;}
+    .spt{font-family:'Orbitron',sans-serif;font-size:1rem;margin-bottom:.4rem;color:var(--b);}
+    .spd2{color:var(--t2);font-size:.88rem;}
+
+    /* FOOTER */
+    footer{background:var(--bg2);padding:3rem 2rem;border-top:3px solid var(--pk);}
+    .fc{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:2.5rem;}
+    .fs h3{font-family:'Orbitron',sans-serif;color:var(--b);margin-bottom:.9rem;font-size:1rem;}
+    .fs ul{list-style:none;} .fs ul li{margin-bottom:.45rem;}
+    .fs a{color:var(--t2);text-decoration:none;transition:color .3s;} .fs a:hover{color:var(--b);}
+    .fb{text-align:center;padding-top:2rem;margin-top:2rem;border-top:1px solid rgba(255,255,255,.08);color:var(--t2);font-size:.88rem;}
+
+    /* MODALS */
+    .modal{display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);align-items:center;justify-content:center;}
+    .modal.active{display:flex;animation:mIn .3s ease;}
+    .mc{background:var(--card);padding:2.5rem;border-radius:20px;max-width:430px;width:90%;border:3px solid var(--p);box-shadow:0 0 50px rgba(157,78,221,.4);position:relative;}
+    .mh{text-align:center;margin-bottom:1.8rem;}
+    .mh h2{font-family:'Orbitron',sans-serif;color:var(--b);font-size:1.4rem;}
+    .mh p{color:var(--t2);margin-top:.4rem;font-size:.95rem;}
+    .fg{margin-bottom:1.3rem;}
+    .fg label{display:block;margin-bottom:.4rem;color:var(--t2);font-size:.88rem;}
+    .fg input{width:100%;padding:.75rem 1rem;background:var(--bg2);border:2px solid var(--p);border-radius:8px;color:var(--t);font-family:'Rajdhani',sans-serif;font-size:.98rem;}
+    .fg input:focus{outline:none;border-color:var(--b);box-shadow:0 0 12px rgba(0,245,255,.25);}
+    .ma{display:flex;gap:1rem;justify-content:center;margin-top:1.8rem;}
+    .xcl{background:transparent;border:none;color:var(--t2);font-size:1.4rem;cursor:pointer;position:absolute;top:1rem;right:1.4rem;transition:color .2s;}
+    .xcl:hover{color:var(--pk);}
+    .emsg{color:var(--pk);font-size:.83rem;margin-top:.5rem;display:none;text-align:center;}
+    .smsg{color:var(--g);font-size:.83rem;margin-top:.5rem;display:none;text-align:center;}
+
+    .glowing{animation:glow 2.2s infinite;}
+    .ain{animation:sIn .55s ease both;}
+    @media(max-width:900px){.hc{flex-wrap:wrap;gap:.8rem} nav ul{flex-wrap:wrap;justify-content:center;gap:.6rem} .hero h1{font-size:1.4rem} .gmb{grid-template-columns:1fr}}
+    @media(max-width:600px){.rcd{font-size:1rem;flex-direction:column;gap:.5rem}}
+  </style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="sc tl"></div><div class="sc tr"></div><div class="sc bl"></div><div class="sc br"></div>
+  <div class="srow">
+    <img src="logo.png" alt="NanoPlay" class="slogo" onerror="this.style.display='none'">
+    <div class="stitle">NanoPlay IoT</div>
+  </div>
+  <div class="ssub">ESP32 Gaming Console</div>
+  <div class="sbar-w"><div class="sbar"></div></div>
+  <div class="steam">microbots · Group 6 · HMK AI Club</div>
+</div>
+
+<!-- HEADER -->
+<header id="mh">
+  <div class="hc">
+    <div class="logo" onclick="go('home')">
+      <img src="logo.png" alt="NanoPlay" onerror="this.style.display='none'">
+      <span class="brand">NanoPlay IoT</span>
+    </div>
+    <nav><ul>
+      <li><a href="#home">Home</a></li>
+      <li><a href="#games">Games</a></li>
+      <li><a href="#leaderboard">Leaderboard</a></li>
+      <li><a href="#multiplayer">Multiplayer</a></li>
+      <li><a href="#setup">Setup</a></li>
+      <li><a href="#specs">Specs</a></li>
+    </ul></nav>
+    <div class="auth">
+      <span id="ubadge">👤 <span id="uname"></span></span>
+      <button class="btn btn-s" id="bLogin"  onclick="openM('lm')">Login</button>
+      <button class="btn btn-p" id="bSignup" onclick="openM('rm')">Sign Up</button>
+      <button class="btn btn-d" id="bLogout" onclick="doLogout()" style="display:none">Logout</button>
+    </div>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero" id="home">
+  <div class="hcont">
+    <h1>🎮 NANOPLAY IoT CONSOLE</h1>
+    <p>6 retro games on ESP32 + OLED. Beat your friends and dominate the global leaderboard!</p>
+    <div class="stats">
+      <div class="stat"><span class="snum" id="stTotal">—</span><span class="slbl">Total Scores</span></div>
+      <div class="stat"><span class="snum" id="stHigh">—</span><span class="slbl">Highest Score</span></div>
+      <div class="stat"><span class="snum">6</span><span class="slbl">Games</span></div>
+    </div>
+    <div class="hbtns">
+      <button class="btn btn-p btn-lg glowing" onclick="go('leaderboard')">🏆 Leaderboard</button>
+      <button class="btn btn-s btn-lg" onclick="go('games')">🕹️ Play Now</button>
+    </div>
+  </div>
+</section>
+
+<!-- GAMES -->
+<section class="gsec" id="games">
+  <h2 class="stitle">🕹️ CHOOSE YOUR GAME</h2>
+  <p class="ssub2">Click any game to see how it plays and start a challenge room!</p>
+  <div class="ggrid">
+    <div class="gc fl ain" onclick="openGM('flappy')"  style="animation-delay:.00s"><div class="gprev"><canvas id="pfl" width="256" height="128"></canvas><div class="pov">▶ VIEW &amp; CHALLENGE</div><span class="gprev-lbl">OLED PREVIEW</span></div><div class="gi"><div class="ai"><span class="ad"></span>Flappy Bird</div><h3 class="gtitle">Flappy Bird</h3><p class="gdesc">Navigate your bird through pipes. Speed increases as your score climbs!</p><div class="gfeat"><span class="ftag">Endless</span><span class="ftag">Speed Up</span><span class="ftag">Firebase Sync</span></div><div class="gstats"><div class="gstat"><span class="gsv" id="rf">—</span><span class="gsl">Record</span></div><div class="gstat"><span class="gsv">A/D</span><span class="gsl">Jump</span></div><div class="gstat"><span class="gsv">∞</span><span class="gsl">Levels</span></div></div><button class="btn-g">🏁 Open Challenge Room</button></div></div>
+    <div class="gc po ain" onclick="openGM('pong')"    style="animation-delay:.08s"><div class="gprev"><canvas id="ppo" width="256" height="128"></canvas><div class="pov">▶ VIEW &amp; CHALLENGE</div><span class="gprev-lbl">OLED PREVIEW</span></div><div class="gi"><div class="ai"><span class="ad"></span>Pong</div><h3 class="gtitle">Pong</h3><p class="gdesc">Classic paddle battle vs AI. First to 7 points wins!</p><div class="gfeat"><span class="ftag">AI Opponent</span><span class="ftag">First to 7</span><span class="ftag">Firebase Sync</span></div><div class="gstats"><div class="gstat"><span class="gsv" id="rp">—</span><span class="gsl">Record</span></div><div class="gstat"><span class="gsv">A/B</span><span class="gsl">Paddle</span></div><div class="gstat"><span class="gsv">7</span><span class="gsl">Win Score</span></div></div><button class="btn-g">🏁 Open Challenge Room</button></div></div>
+    <div class="gc di ain" onclick="openGM('dino')"    style="animation-delay:.16s"><div class="gprev"><canvas id="pdi" width="256" height="128"></canvas><div class="pov">▶ VIEW &amp; CHALLENGE</div><span class="gprev-lbl">OLED PREVIEW</span></div><div class="gi"><div class="ai"><span class="ad"></span>Dino Run</div><h3 class="gtitle">Dino Run</h3><p class="gdesc">Jump over cacti as speed climbs from 4 to 9. How far can you go?</p><div class="gfeat"><span class="ftag">Endless</span><span class="ftag">Speed 4→9</span><span class="ftag">Firebase Sync</span></div><div class="gstats"><div class="gstat"><span class="gsv" id="rd">—</span><span class="gsl">Record</span></div><div class="gstat"><span class="gsv">A</span><span class="gsl">Jump</span></div><div class="gstat"><span class="gsv">4→9</span><span class="gsl">Speed</span></div></div><button class="btn-g">🏁 Open Challenge Room</button></div></div>
+    <div class="gc sp ain" onclick="openGM('space')"   style="animation-delay:.24s"><div class="gprev"><canvas id="psp" width="256" height="128"></canvas><div class="pov">▶ VIEW &amp; CHALLENGE</div><span class="gprev-lbl">OLED PREVIEW</span></div><div class="gi"><div class="ai"><span class="ad"></span>Space Shooter</div><h3 class="gtitle">Space Shooter</h3><p class="gdesc">Destroy asteroids, survive the galaxy! 10 points per hit.</p><div class="gfeat"><span class="ftag">Shoot</span><span class="ftag">10pts/Hit</span><span class="ftag">Firebase Sync</span></div><div class="gstats"><div class="gstat"><span class="gsv" id="rs">—</span><span class="gsl">Record</span></div><div class="gstat"><span class="gsv">A/C</span><span class="gsl">Move</span></div><div class="gstat"><span class="gsv">B</span><span class="gsl">Fire</span></div></div><button class="btn-g">🏁 Open Challenge Room</button></div></div>
+    <div class="gc mz ain" onclick="openGM('maze')"    style="animation-delay:.32s"><div class="gprev"><canvas id="pmz" width="256" height="128"></canvas><div class="pov">▶ VIEW &amp; CHALLENGE</div><span class="gprev-lbl">OLED PREVIEW</span></div><div class="gi"><div class="ai"><span class="ad"></span>Maze Runner</div><h3 class="gtitle">Maze Runner</h3><p class="gdesc">Solve the maze before time runs out! 3 difficulty levels.</p><div class="gfeat"><span class="ftag">3 Levels</span><span class="ftag">Timer</span><span class="ftag">Firebase Sync</span></div><div class="gstats"><div class="gstat"><span class="gsv" id="rm">—</span><span class="gsl">Record</span></div><div class="gstat"><span class="gsv">A/B/C</span><span class="gsl">Move</span></div><div class="gstat"><span class="gsv">35-60s</span><span class="gsl">Timer</span></div></div><button class="btn-g">🏁 Open Challenge Room</button></div></div>
+    <div class="gc br ain" onclick="openGM('breakout')" style="animation-delay:.40s"><div class="gprev"><canvas id="pbr" width="256" height="128"></canvas><div class="pov">▶ VIEW &amp; CHALLENGE</div><span class="gprev-lbl">OLED PREVIEW</span></div><div class="gi"><div class="ai"><span class="ad"></span>Breakout</div><h3 class="gtitle">Breakout</h3><p class="gdesc">Break all bricks across 10 levels! Hard bricks need multiple hits.</p><div class="gfeat"><span class="ftag">10 Levels</span><span class="ftag">3-5 Lives</span><span class="ftag">Firebase Sync</span></div><div class="gstats"><div class="gstat"><span class="gsv" id="rbr">—</span><span class="gsl">Record</span></div><div class="gstat"><span class="gsv">A/C</span><span class="gsl">Move</span></div><div class="gstat"><span class="gsv">B</span><span class="gsl">Launch</span></div></div><button class="btn-g">🏁 Open Challenge Room</button></div></div>
+  </div>
+</section>
+
+<!-- GAME MODAL -->
+<div class="gmodal" id="gmod">
+  <div class="gmi" id="gmii">
+    <div class="gmh">
+      <div class="gmhl"><span class="gme" id="gme">🎮</span><div><div class="gmt" id="gmt">Game</div><div class="gms" id="gmst"></div></div></div>
+      <button class="gmc2" onclick="closeGM()">✕</button>
+    </div>
+    <div class="gmb">
+      <div class="gml">
+        <div class="gmcw"><canvas id="gmc" width="256" height="128"></canvas></div>
+        <div class="gmbg"><span class="od"></span>LIVE OLED SIMULATION</div>
+        <div class="gmsl">128×64 SSD1306 OLED</div>
+      </div>
+      <div class="gmr">
+        <div><div class="gmslbl">🎮 Controls</div><div class="cgrid" id="gctr"></div></div>
+        <div><div class="gmslbl">⭐ Scoring</div><div class="slist" id="gscr"></div></div>
+        <div>
+          <div class="gmslbl">👥 Challenge Room</div>
+          <div class="crm">
+            <p style="color:var(--t2);font-size:.85rem;margin-bottom:.5rem">Share this code — highest score wins!</p>
+            <div class="rcodem"><span id="grc">----</span><button class="mcopy" onclick="cpGm()">📋</button></div>
+            <div style="display:flex;flex-direction:column;gap:.3rem">
+              <div class="rpi"><span class="rpd on"></span>You (this device)<span class="rps" id="gys">—</span></div>
+              <div class="rpi"><span class="rpd off"></span>Waiting for player 2…</div>
+              <div class="rpi"><span class="rpd off"></span>Waiting for player 3…</div>
+            </div>
+          </div>
+        </div>
+        <div class="gmfb">
+          <button class="btn btn-s" onclick="gmNew()">🔄 New Code</button>
+          <button class="btn btn-s" onclick="gmInv()">📤 Invite</button>
+          <button class="btn btn-p glowing" onclick="gmStart()">🏁 Start!</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LEADERBOARD -->
+<section class="lbsec" id="leaderboard">
+  <h2 class="stitle">🏆 GLOBAL LEADERBOARD</h2>
+  <p class="ssub2">Live scores from all ESP32 devices — synced automatically via Firebase!</p>
+  <div class="lbc">
+    <div class="lbf">
+      <button class="fbtn active" onclick="flb('all',this)">All</button>
+      <button class="fbtn" onclick="flb('flappy',this)">🐦 Flappy</button>
+      <button class="fbtn" onclick="flb('dino',this)">🦖 Dino</button>
+      <button class="fbtn" onclick="flb('space',this)">🚀 Space</button>
+      <button class="fbtn" onclick="flb('pong',this)">🏓 Pong</button>
+      <button class="fbtn" onclick="flb('maze',this)">🌀 Maze</button>
+      <button class="fbtn" onclick="flb('breakout',this)">🧱 Breakout</button>
+    </div>
+    <table class="lbt">
+      <thead><tr><th>Rank</th><th>Player</th><th>Game</th><th>Score</th><th>Device</th><th>Time</th></tr></thead>
+      <tbody id="lbb"><tr class="lr"><td colspan="6">⏳ Loading from Firebase...</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- MULTIPLAYER -->
+<section class="mpsec" id="multiplayer">
+  <h2 class="stitle">👥 CHALLENGE ROOM</h2>
+  <p class="ssub2">Create a room, share the code — highest score wins!</p>
+  <div class="rmc">
+    <div class="rmh">
+      <h3 style="font-family:'Orbitron',sans-serif;color:var(--b);margin-bottom:.5rem">Challenge Room</h3>
+      <p style="color:var(--t2)">Share the 4-letter code. Each player selects the same game on their ESP32.</p>
+    </div>
+    <div class="rcd"><span id="rc">----</span><button class="cbtn" onclick="cpRc()">📋 Copy</button></div>
+    <div class="pl">
+      <h4 style="color:var(--p);margin-bottom:1rem;font-family:'Orbitron',sans-serif">Players (<span id="pct">0</span>/4)</h4>
+      <div id="pcon"><div class="pi"><span><span class="pst off"></span>Waiting for players...</span></div></div>
+    </div>
+    <div class="ra">
+      <button class="btn btn-s" onclick="newRc()">🔄 New Code</button>
+      <button class="btn btn-s" onclick="invP()">📤 Invite</button>
+      <button class="btn btn-p glowing" onclick="stCh()">🎮 Start Challenge</button>
+    </div>
+  </div>
+</section>
+
+<!-- SETUP -->
+<section class="spsec" id="setup">
+  <h2 class="stitle">⚡ SETUP GUIDE</h2>
+  <p class="ssub2">Connect your ESP32 in 4 steps</p>
+  <div class="sg">
+    <h3>🔧 Connect ESP32 to this leaderboard</h3>
+    <ol>
+      <li>Open <code>NanoPlay.ino</code> in Arduino IDE</li>
+      <li>Set <code>WIFI_SSID</code> and <code>WIFI_PASS</code> to your home WiFi</li>
+      <li>Set <code>PLAYER_NAME</code> to your name (appears in leaderboard)</li>
+      <li>Upload → play a game → score appears here automatically! 🌍</li>
+    </ol>
+    <br>
+    <h3 style="color:var(--g);margin-bottom:.5rem">📦 Required Libraries</h3>
+    <p style="color:var(--t2)"><code>U8g2</code> · <code>ArduinoJson v6</code> · ESP32 Arduino core</p>
+  </div>
+</section>
+
+<!-- SPECS -->
+<section class="specs" id="specs">
+  <h2 class="stitle">⚙️ TECH SPECS</h2>
+  <p class="ssub2">Built with ESP32 + Firebase + GitHub Pages</p>
+  <div class="spg">
+    <div class="spc"><div class="spi">🎛️</div><h3 class="spt">ESP32-WROOM-32</h3><p class="spd2">WiFi 802.11 b/g/n · Dual-core 240MHz · 4MB Flash</p></div>
+    <div class="spc"><div class="spi">📺</div><h3 class="spt">SSD1306 OLED</h3><p class="spd2">0.96" · 128×64 pixels · I2C · Monochrome gaming</p></div>
+    <div class="spc"><div class="spi">☁️</div><h3 class="spt">Firebase RTDB</h3><p class="spd2">Real-time score sync · REST API · Worldwide</p></div>
+    <div class="spc"><div class="spi">🌍</div><h3 class="spt">GitHub Pages</h3><p class="spd2">Free hosting · Always online · Any browser</p></div>
+    <div class="spc"><div class="spi">🎮</div><h3 class="spt">4-Button Control</h3><p class="spd2">GPIO 19 (A) · 25 (B) · 26 (C) · 15 (D)</p></div>
+    <div class="spc"><div class="spi">🏆</div><h3 class="spt">6 Games</h3><p class="spd2">Flappy · Pong · Dino · Space · Maze · Breakout</p></div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer id="about">
+  <div class="fc">
+    <div class="fs">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">
+        <img src="logo.png" alt="NanoPlay" style="height:40px;width:auto;filter:drop-shadow(0 0 8px var(--p));" onerror="this.style.display='none'">
+        <span class="brand" style="font-size:1.4rem">NanoPlay</span>
+      </div>
+      <p style="color:var(--t2);line-height:1.9">ESP32 gaming console with global leaderboard.<br>Built by microbots — Group 6.</p>
+    </div>
+    <div class="fs"><h3>Quick Links</h3><ul><li><a href="#home">Home</a></li><li><a href="#games">Games</a></li><li><a href="#leaderboard">Leaderboard</a></li><li><a href="#multiplayer">Multiplayer</a></li><li><a href="#setup">Setup Guide</a></li></ul></div>
+    <div class="fs"><h3>Games</h3><ul>
+      <li><a href="#" onclick="openGM('flappy');return false">🐦 Flappy Bird</a></li>
+      <li><a href="#" onclick="openGM('pong');return false">🏓 Pong</a></li>
+      <li><a href="#" onclick="openGM('dino');return false">🦖 Dino Run</a></li>
+      <li><a href="#" onclick="openGM('space');return false">🚀 Space Shooter</a></li>
+      <li><a href="#" onclick="openGM('maze');return false">🌀 Maze Runner</a></li>
+      <li><a href="#" onclick="openGM('breakout');return false">🧱 Breakout</a></li>
+    </ul></div>
+    <div class="fs"><h3>Project</h3><ul>
+      <li><a href="https://github.com/abdalrahmankhalaf2003-eng/playiot" target="_blank">📂 GitHub Source</a></li>
+      <li><a href="NanoPlay.ino" download>📥 Download .ino</a></li>
+      <li>🏫 HMK Robotic &amp; AI Club</li>
+    </ul></div>
+  </div>
+  <div class="fb">© 2026 NanoPlay IoT — microbots Group 6 — HMK Robotic and AI Club</div>
+</footer>
+
+<!-- LOGIN MODAL -->
+<div class="modal" id="lm">
+  <div class="mc">
+    <button class="xcl" onclick="closeM('lm')">✕</button>
+    <div class="mh"><h2>🎮 Login</h2><p>Access your gaming profile</p></div>
+    <div class="fg"><label>Email</label><input type="email" id="le" placeholder="your@email.com"></div>
+    <div class="fg"><label>Password</label><input type="password" id="lp" placeholder="••••••••"></div>
+    <p class="emsg" id="lerr"></p>
+    <div class="ma"><button class="btn btn-p btn-lg" onclick="doLogin()">Login</button></div>
+    <p style="text-align:center;margin-top:1.4rem;color:var(--t2)">No account? <a href="#" onclick="swM('lm','rm')" style="color:var(--b)">Sign Up</a></p>
+  </div>
+</div>
+
+<!-- REGISTER MODAL -->
+<div class="modal" id="rm">
+  <div class="mc">
+    <button class="xcl" onclick="closeM('rm')">✕</button>
+    <div class="mh"><h2>🎮 Create Account</h2><p>Your username appears in the leaderboard! 🏆</p></div>
+    <div class="fg"><label>Username (shown in leaderboard)</label><input type="text" id="ru" placeholder="YourGameName" maxlength="20"></div>
+    <div class="fg"><label>Email</label><input type="email" id="re" placeholder="your@email.com"></div>
+    <div class="fg"><label>Password (min 6 chars)</label><input type="password" id="rp" placeholder="••••••••"></div>
+    <p class="emsg" id="rerr"></p>
+    <p class="smsg" id="rok">✅ Account created! Welcome to NanoPlay!</p>
+    <div class="ma"><button class="btn btn-p btn-lg" onclick="doReg()">Sign Up</button></div>
+    <p style="text-align:center;margin-top:1.4rem;color:var(--t2)">Have account? <a href="#" onclick="swM('rm','lm')" style="color:var(--b)">Login</a></p>
+  </div>
+</div>
+
+<script>
+/* ═══ GAME DATA ═══ */
+const GD={
+  flappy: {emoji:'🐦',title:'FLAPPY BIRD',sub:'Endless — avoid the pipes!',color:'#39ff14',
+    ctrl:[{k:'A/D',d:'Jump'},{k:'Hold D',d:'Menu'}],
+    scr:[{l:'Each pipe',v:'+1 pt'},{l:'Score÷5',v:'Speed up'},{l:'Firebase',v:'Auto sync'}]},
+  pong:   {emoji:'🏓',title:'PONG',sub:'First to 7 — vs AI!',color:'#ff006e',
+    ctrl:[{k:'A',d:'Paddle UP'},{k:'B',d:'Paddle DOWN'},{k:'A+B',d:'Start'},{k:'Hold D',d:'Menu'}],
+    scr:[{l:'Beat AI',v:'+1 pt'},{l:'First to 7',v:'🏆'},{l:'Firebase',v:'Auto sync'}]},
+  dino:   {emoji:'🦖',title:'DINO RUN',sub:'Jump over cacti!',color:'#ff9e00',
+    ctrl:[{k:'A',d:'Jump'},{k:'Hold D',d:'Menu'}],
+    scr:[{l:'Each cactus',v:'+1 pt'},{l:'Every 5',v:'Speed up'},{l:'Firebase',v:'Auto sync'}]},
+  space:  {emoji:'🚀',title:'SPACE SHOOTER',sub:'Destroy asteroids!',color:'#9d4edd',
+    ctrl:[{k:'A',d:'LEFT'},{k:'C',d:'RIGHT'},{k:'B',d:'Fire'},{k:'Hold D',d:'Menu'}],
+    scr:[{l:'Each asteroid',v:'+10 pts'},{l:'Score÷5',v:'Speed up'},{l:'Firebase',v:'Auto sync'}]},
+  maze:   {emoji:'🌀',title:'MAZE RUNNER',sub:'Solve before timer hits 0!',color:'#fff01f',
+    ctrl:[{k:'A',d:'UP'},{k:'B',d:'DOWN'},{k:'C',d:'RIGHT'},{k:'Hold D',d:'Menu'}],
+    scr:[{l:'Time left×10',v:'Base'},{l:'Minus moves',v:'–pts'},{l:'Firebase',v:'Auto sync'}]},
+  breakout:{emoji:'🧱',title:'BREAKOUT',sub:'Break all bricks — 10 levels!',color:'#00f5ff',
+    ctrl:[{k:'A',d:'LEFT'},{k:'C',d:'RIGHT'},{k:'B',d:'Launch'},{k:'Hold D',d:'Menu'}],
+    scr:[{l:'Each brick',v:'row×10×lvl'},{l:'Clear level',v:'+1 Life'},{l:'Firebase',v:'Auto sync'}]}
+};
+
+/* ═══ CANVAS DRAWING ═══ */
+const S=2;
+const W='#ffffff',BG='#050510';
+function px(c,x,y,w=1,h=1){c.fillRect(x*S,y*S,w*S,h*S);}
+function rect(c,x,y,w,h,f=true){f?c.fillRect(x*S,y*S,w*S,h*S):c.strokeRect(x*S+1,y*S+1,w*S-2,h*S-2);}
+function circ(c,x,y,r,f=true){c.beginPath();c.arc(x*S,y*S,r*S,0,Math.PI*2);f?c.fill():c.stroke();}
+function ln(c,x1,y1,x2,y2){c.beginPath();c.moveTo(x1*S,y1*S);c.lineTo(x2*S,y2*S);c.stroke();}
+function txt(c,s,x,y,sz=4){c.font=`${sz*S}px "Press Start 2P",monospace`;c.fillText(s,x*S,y*S);}
+
+let fS={pX:96,pY:20,p2X:176,p2Y:15,bY:25,bVY:0,sc:0,dead:false,t:0,dT:0};
+function dFlappy(c,dt){
+  const s=fS;s.t+=dt;
+  if(!s.dead){s.bVY+=0.5*dt/16;s.bY+=s.bVY*dt/16;s.pX-=1.5*dt/16;s.p2X-=1.5*dt/16;
+    if(s.pX<-24){s.pX=128;s.pY=10+Math.random()*20;}
+    if(s.p2X<-24){s.p2X=128;s.p2Y=10+Math.random()*20;s.sc++;}
+    if(s.bY>52||s.bY<0)s.dead=true;
+    if(s.pX<37&&s.pX>15&&(s.bY<s.pY+30||s.bY>s.pY+50))s.dead=true;
+  }else{s.dT+=dt;if(s.dT>1800)Object.assign(s,{pX:96,pY:20,p2X:176,p2Y:15,bY:25,bVY:0,sc:0,dead:false,t:0,dT:0});}
+  c.fillStyle=BG;c.fillRect(0,0,256,128);c.fillStyle=W;c.lineWidth=S;
+  [[s.pX,s.pY],[s.p2X,s.p2Y]].forEach(([px2,py2])=>{rect(c,px2,0,24,py2+30);rect(c,px2,py2+50,24,14);});
+  if(!s.dead){rect(c,20,s.bY,8,7);c.fillStyle=BG;rect(c,24,s.bY+1,2,2);c.fillStyle=W;rect(c,20,s.bY+3,20,2);}
+  else{c.fillStyle='#ff006e';txt(c,'OVER',38,36,6);}
+  c.fillStyle=W;txt(c,''+s.sc,2,8);c.strokeStyle=W;rect(c,0,0,128,64,false);
+}
+
+let pS={pY:24,aY:24,bX:64,bY:32,bVX:1.4,bVY:0.9,pSc:0,aSc:0};
+function dPong(c,dt){
+  const s=pS;s.bX+=s.bVX*dt/16;s.bY+=s.bVY*dt/16;
+  if(s.bY<0||s.bY>61){s.bVY*=-1;s.bY=Math.max(0,Math.min(61,s.bY));}
+  if(s.bY>s.aY+7)s.aY+=1.2*dt/16;else if(s.bY<s.aY-1)s.aY-=1.2*dt/16;
+  s.aY=Math.max(0,Math.min(50,s.aY));
+  if(s.bX<7&&s.bY>s.pY-1&&s.bY<s.pY+15){s.bVX=Math.abs(s.bVX);s.bX=7;}
+  if(s.bX>119&&s.bY>s.aY-1&&s.bY<s.aY+15){s.bVX=-Math.abs(s.bVX);s.bX=119;}
+  if(s.bX<0){s.aSc++;s.bX=64;s.bY=32;s.bVX=1.4;s.bVY=0.9;}
+  if(s.bX>128){s.pSc++;s.bX=64;s.bY=32;s.bVX=-1.4;s.bVY=-0.9;}
+  if(s.pSc>=7||s.aSc>=7){s.pSc=0;s.aSc=0;}
+  c.fillStyle=BG;c.fillRect(0,0,256,128);c.fillStyle=W;
+  for(let y=0;y<64;y+=4)px(c,64,y);
+  rect(c,3,s.pY,3,14);rect(c,122,s.aY,3,14);rect(c,s.bX,s.bY,3,3);
+  txt(c,''+s.pSc,50,10);txt(c,''+s.aSc,68,10);
+  c.strokeStyle=W;rect(c,0,0,128,64,false);
+}
+
+let dS={dY:37,vel:0,obs:110,sc:0,spd:3,dead:false,t:0,an:0,dT:0};
+function dDino(c,dt){
+  const s=dS;s.t+=dt;s.an+=dt;
+  if(!s.dead){s.vel+=0.7*dt/16;s.dY+=s.vel*dt/16;if(s.dY>=37){s.dY=37;s.vel=0;}
+    s.obs-=s.spd*dt/16;
+    if(s.obs<-12){s.obs=128+Math.random()*40;s.sc++;if(s.sc%5===0&&s.spd<7)s.spd+=0.5;}
+    if(s.obs<34&&s.obs>16&&s.dY>30)s.dead=true;
+  }else{s.dT+=dt;if(s.dT>1800)Object.assign(s,{dY:37,vel:0,obs:110,sc:0,spd:3,dead:false,t:0,an:0,dT:0});}
+  c.fillStyle=BG;c.fillRect(0,0,256,128);c.fillStyle=W;
+  ln(c,0,57,128,57);rect(c,20,s.dY,10,8);rect(c,22,s.dY-4,8,5);
+  if(Math.floor(s.an/200)%2===0){rect(c,22,s.dY+8,3,3);rect(c,25,s.dY+8,3,3);}
+  else{rect(c,21,s.dY+8,3,3);rect(c,26,s.dY+8,3,3);}
+  c.fillStyle=BG;px(c,27,s.dY-2);c.fillStyle=W;
+  rect(c,s.obs,39,4,18);rect(c,s.obs-3,44,3,5);rect(c,s.obs+4,46,3,4);
+  if(s.dead){c.fillStyle='#ff9e00';txt(c,'OVER',38,30,6);}
+  c.fillStyle=W;txt(c,''+s.sc,2,8);c.strokeStyle=W;rect(c,0,0,128,64,false);
+}
+
+let spS={sx:56,bl:[],as:[],sc:0,t:0,stT:0};
+function dSpace(c,dt){
+  const s=spS;s.t+=dt;s.stT+=dt;
+  if(s.stT>600){s.bl.push({x:s.sx+8,y:48});s.stT=0;}
+  s.sx+=Math.sin(s.t*0.002)*0.8;s.sx=Math.max(4,Math.min(108,s.sx));
+  s.bl=s.bl.filter(b=>{b.y-=5*dt/16;return b.y>0;});
+  if(Math.random()<0.02)s.as.push({x:Math.random()*118,y:-8,spd:1+Math.random()*2});
+  s.as=s.as.filter(a=>{a.y+=a.spd*dt/16;return a.y<70;});
+  s.bl.forEach(b=>{s.as.forEach((a,i)=>{if(Math.abs(b.x-a.x)<7&&Math.abs(b.y-a.y)<7){s.as.splice(i,1);s.sc+=10;b.y=-99;}});});
+  c.fillStyle=BG;c.fillRect(0,0,256,128);c.fillStyle=W;
+  for(let i=0;i<12;i++)px(c,(s.t/60+i*17)%128,(s.t/90+i*13)%64);
+  c.beginPath();c.moveTo((s.sx+8)*S,48*S);c.lineTo((s.sx+3)*S,58*S);c.lineTo((s.sx+13)*S,58*S);c.closePath();c.fill();
+  s.bl.forEach(b=>{rect(c,b.x,b.y,2,5);});s.as.forEach(a=>{circ(c,a.x,a.y,4);});
+  txt(c,''+s.sc,2,8);c.strokeStyle=W;rect(c,0,0,128,64,false);
+}
+
+const MZW=12,MZH=5,MZC=10;
+let mzS={cl:null,px:0,py:0,t:0,mT:0};
+function mzGen(){
+  const w=Array.from({length:MZW},()=>Array.from({length:MZH},()=>({r:true,d:true}))),v=Array.from({length:MZW},()=>new Array(MZH).fill(false)),stk=[[0,0]];
+  v[0][0]=true;
+  while(stk.length){const[cx,cy]=stk[stk.length-1],nb=[[cx+1,cy,'r'],[cx-1,cy,'lr'],[cx,cy+1,'d'],[cx,cy-1,'ud']].filter(([nx,ny])=>nx>=0&&nx<MZW&&ny>=0&&ny<MZH&&!v[nx][ny]);
+    if(!nb.length){stk.pop();continue;}const[nx,ny,dir]=nb[Math.floor(Math.random()*nb.length)];
+    if(dir==='r')w[cx][cy].r=false;else if(dir==='lr')w[nx][ny].r=false;else if(dir==='d')w[cx][cy].d=false;else w[nx][ny].d=false;
+    v[nx][ny]=true;stk.push([nx,ny]);}return w;
+}
+function dMaze(c,dt){
+  const s=mzS;s.t+=dt;s.mT+=dt;if(!s.cl)s.cl=mzGen();
+  if(s.mT>500){s.mT=0;const dirs=[[1,0,'r'],[0,1,'d'],[-1,0,'lr'],[0,-1,'ud']].filter(([dx,dy,dir])=>{const nx=s.px+dx,ny=s.py+dy;if(nx<0||nx>=MZW||ny<0||ny>=MZH)return false;if(dir==='r')return!s.cl[s.px][s.py].r;if(dir==='lr')return!s.cl[nx][ny].r;if(dir==='d')return!s.cl[s.px][s.py].d;return!s.cl[nx][ny].d;});
+    if(dirs.length){const[dx,dy]=dirs[Math.floor(Math.random()*dirs.length)];s.px+=dx;s.py+=dy;}
+    if(s.px===MZW-1&&s.py===MZH-1){s.px=0;s.py=0;s.cl=mzGen();}}
+  c.fillStyle=BG;c.fillRect(0,0,256,128);c.fillStyle=W;c.strokeStyle=W;c.lineWidth=S;
+  for(let x=0;x<MZW;x++)for(let y=0;y<MZH;y++){const ox=x*MZC+4,oy=y*MZC+4;
+    if(s.cl[x][y].r)ln(c,ox+MZC,oy,ox+MZC,oy+MZC);if(s.cl[x][y].d)ln(c,ox,oy+MZC,ox+MZC,oy+MZC);
+    if(x===0)ln(c,ox,oy,ox,oy+MZC);if(y===0)ln(c,ox,oy,ox+MZC,oy);}
+  c.fillStyle='#fff01f';px(c,(MZW-1)*MZC+4+MZC/2,(MZH-1)*MZC+4+MZC/2-3);
+  c.fillStyle='#00f5ff';circ(c,s.px*MZC+4+MZC/2,s.py*MZC+4+MZC/2,2.5);
+  c.strokeStyle=W;rect(c,0,0,128,64,false);
+}
+
+const BWW=11,BWH=5,BWC=10,BWR=4;
+let brS={pX:50,bX:64,bY:52,bVX:1.2,bVY:-1.5,bk:null,sc:0,t:0};
+function dBreakout(c,dt){
+  const s=brS;s.t+=dt;if(!s.bk)s.bk=Array.from({length:BWC},(_,ci)=>Array.from({length:BWR},(_,r)=>r===0?2:1));
+  s.pX+=(s.bX-s.pX)*0.04*dt/16;s.pX=Math.max(0,Math.min(100,s.pX));
+  s.bX+=s.bVX*dt/16;s.bY+=s.bVY*dt/16;
+  if(s.bX<2||s.bX>126)s.bVX*=-1;if(s.bY<8)s.bVY=Math.abs(s.bVY);
+  if(s.bY>60){s.bY=52;s.bX=64;s.bVX=1.2;s.bVY=-1.5;}
+  if(s.bY>52&&s.bY<58&&s.bX>s.pX&&s.bX<s.pX+28)s.bVY=-Math.abs(s.bVY);
+  for(let ci=0;ci<BWC;ci++)for(let r=0;r<BWR;r++){if(!s.bk[ci][r])continue;const bx=ci*(BWW+1)+1,by=r*(BWH+1)+9;
+    if(s.bX>bx&&s.bX<bx+BWW&&s.bY>by&&s.bY<by+BWH){s.bk[ci][r]--;if(!s.bk[ci][r])s.sc+=(BWR-r)*10;s.bVY*=-1;break;}}
+  if(s.bk.every(col=>col.every(b=>!b))){s.bk=Array.from({length:BWC},(_,ci)=>Array.from({length:BWR},(_,r)=>r===0?2:1));s.sc=0;}
+  c.fillStyle=BG;c.fillRect(0,0,256,128);c.fillStyle=W;
+  for(let ci=0;ci<BWC;ci++)for(let r=0;r<BWR;r++){if(!s.bk[ci][r])continue;const bx=ci*(BWW+1)+1,by=r*(BWH+1)+9;
+    if(s.bk[ci][r]===2){rect(c,bx,by,BWW,BWH);c.fillStyle=BG;rect(c,bx+1,by+1,BWW-2,2);c.fillStyle=W;}else rect(c,bx,by,BWW,BWH);}
+  rect(c,s.pX,56,28,4);circ(c,s.bX,s.bY,2);
+  txt(c,''+s.sc,2,7);c.strokeStyle=W;rect(c,0,0,128,64,false);
+}
+
+const DFN={flappy:dFlappy,pong:dPong,dino:dDino,space:dSpace,maze:dMaze,breakout:dBreakout};
+const PID={flappy:'pfl',pong:'ppo',dino:'pdi',space:'psp',maze:'pmz',breakout:'pbr'};
+
+/* ═══ CARD PREVIEWS ═══ */
+const pCtx={};let lt=0;
+function initPv(){Object.entries(PID).forEach(([id,cid])=>{const cv=document.getElementById(cid);if(!cv)return;const ctx=cv.getContext('2d');ctx.imageSmoothingEnabled=false;pCtx[id]=ctx;});}
+function animPv(ts){const dt=Math.min(ts-lt,50);lt=ts;Object.entries(pCtx).forEach(([id,ctx])=>DFN[id]?.(ctx,dt));requestAnimationFrame(animPv);}
+
+/* ═══ GAME MODAL ═══ */
+let gCtx=null,gAnim=null,gGame=null,gLast=0;
+const gmSt={
+  flappy:{pX:96,pY:20,p2X:176,p2Y:15,bY:25,bVY:0,sc:0,dead:false,t:0,dT:0},
+  pong:{pY:24,aY:24,bX:64,bY:32,bVX:1.4,bVY:0.9,pSc:0,aSc:0},
+  dino:{dY:37,vel:0,obs:110,sc:0,spd:3,dead:false,t:0,an:0,dT:0},
+  space:{sx:56,bl:[],as:[],sc:0,t:0,stT:0},
+  maze:{cl:null,px:0,py:0,t:0,mT:0},
+  breakout:{pX:50,bX:64,bY:52,bVX:1.2,bVY:-1.5,bk:null,sc:0,t:0}
+};
+const gmDF={
+  flappy(c,dt){const o=fS;fS=gmSt.flappy;dFlappy(c,dt);fS=o;},
+  pong(c,dt){const o=pS;pS=gmSt.pong;dPong(c,dt);pS=o;},
+  dino(c,dt){const o=dS;dS=gmSt.dino;dDino(c,dt);dS=o;},
+  space(c,dt){const o=spS;spS=gmSt.space;dSpace(c,dt);spS=o;},
+  maze(c,dt){const o=mzS;mzS=gmSt.maze;dMaze(c,dt);mzS=o;},
+  breakout(c,dt){const o=brS;brS=gmSt.breakout;dBreakout(c,dt);brS=o;}
+};
+
+function openGM(id){
+  const g=GD[id];if(!g)return;gGame=id;
+  document.getElementById('gmii').style.setProperty('--gmc',g.color);
+  document.getElementById('gme').textContent=g.emoji;
+  document.getElementById('gmt').textContent=g.title;
+  document.getElementById('gmst').textContent=g.sub;
+  document.getElementById('gctr').innerHTML=g.ctrl.map(c=>`<div class="ci"><span class="ck">${c.k}</span><span class="cd">${c.d}</span></div>`).join('');
+  document.getElementById('gscr').innerHTML=g.scr.map(s=>`<div class="si"><span>${s.l}</span><span class="sv">${s.v}</span></div>`).join('');
+  document.getElementById('grc').textContent=genCode();
+  const best=allSc.filter(s=>s.game===id)[0];
+  document.getElementById('gys').textContent=best?best.score:'—';
+  document.getElementById('gmod').classList.add('active');
+  document.body.style.overflow='hidden';
+  const cv=document.getElementById('gmc');gCtx=cv.getContext('2d');gCtx.imageSmoothingEnabled=false;
+  if(id==='space')gmSt.space={sx:56,bl:[],as:[],sc:0,t:0,stT:0};
+  if(id==='maze')gmSt.maze={cl:null,px:0,py:0,t:0,mT:0};
+  if(id==='breakout')gmSt.breakout={pX:50,bX:64,bY:52,bVX:1.2,bVY:-1.5,bk:null,sc:0,t:0};
+  gLast=performance.now();if(gAnim)cancelAnimationFrame(gAnim);
+  function loop(ts){const dt=Math.min(ts-gLast,50);gLast=ts;gmDF[gGame]?.(gCtx,dt);gAnim=requestAnimationFrame(loop);}
+  gAnim=requestAnimationFrame(loop);
+}
+function closeGM(){document.getElementById('gmod').classList.remove('active');document.body.style.overflow='';if(gAnim){cancelAnimationFrame(gAnim);gAnim=null;}}
+function cpGm(){navigator.clipboard.writeText(document.getElementById('grc').textContent).then(()=>{const b=document.querySelector('.mcopy');b.textContent='✅';setTimeout(()=>b.textContent='📋',2000);});}
+function gmNew(){document.getElementById('grc').textContent=genCode();}
+function gmInv(){const code=document.getElementById('grc').textContent;if(navigator.share)navigator.share({title:'NanoPlay',text:`Join my ${GD[gGame]?.title} challenge! Code: ${code}`,url:location.href});else{cpGm();alert('Code: '+code);}}
+function gmStart(){alert(`🏁 Challenge started!\nAll players select "${GD[gGame]?.title}" on their ESP32.\nHighest score wins! 🏆`);}
+document.getElementById('gmod').addEventListener('click',e=>{if(e.target===document.getElementById('gmod'))closeGM();});
+
+/* ═══ FIREBASE ═══ */
+let allSc=[],curFil='all',fbOk=false,curUser=null;
+
+window.addEventListener('firebase-ready',()=>{
+  fbOk=true;
+  const{auth,onAuthStateChanged,db,ref,onValue,query,orderByChild,limitToLast,get,dbRef}=window._fb;
+
+  onAuthStateChanged(auth,user=>{
+    curUser=user;
+    const bl=document.getElementById('bLogin'),bs=document.getElementById('bSignup'),bo=document.getElementById('bLogout'),ub=document.getElementById('ubadge'),un=document.getElementById('uname');
+    if(user){
+      bl.style.display='none';bs.style.display='none';bo.style.display='inline-block';
+      // Get username from DB
+      get(dbRef(db,'users/'+user.uid)).then(snap=>{
+        const name=snap.exists()?snap.val().username:(user.displayName||user.email.split('@')[0]);
+        un.textContent=name;ub.style.display='inline-block';
+      }).catch(()=>{un.textContent=user.email.split('@')[0];ub.style.display='inline-block';});
+    }else{
+      bl.style.display='inline-block';bs.style.display='inline-block';
+      bo.style.display='none';ub.style.display='none';
+    }
+  });
+
+  // Live leaderboard
+  onValue(query(ref(db,'scores'),orderByChild('score'),limitToLast(100)),snap=>{
+    allSc=[];const data=snap.val();
+    if(data)Object.values(data).forEach(e=>allSc.push(e));
+    allSc.sort((a,b)=>b.score-a.score);
+    document.getElementById('stTotal').textContent=allSc.length||'0';
+    document.getElementById('stHigh').textContent=allSc[0]?.score||'—';
+    [{id:'rf',g:'flappy'},{id:'rp',g:'pong'},{id:'rd',g:'dino'},{id:'rs',g:'space'},{id:'rm',g:'maze'},{id:'rbr',g:'breakout'}].forEach(({id,g})=>{
+      const best=allSc.filter(s=>s.game===g)[0];
+      const el=document.getElementById(id);if(el)el.textContent=best?best.score:'—';
+    });
+    renderLB(allSc,curFil);
+  },()=>lbErr());
+});
+
+function renderLB(sc,fil){
+  const f=fil==='all'?sc:sc.filter(s=>s.game===fil);
+  const tb=document.getElementById('lbb');
+  if(!f.length){tb.innerHTML='<tr class="lr"><td colspan="6">🎮 No scores yet — play a game on your ESP32!</td></tr>';return;}
+  const em={flappy:'🐦',pong:'🏓',dino:'🦖',space:'🚀',maze:'🌀',breakout:'🧱'};
+  tb.innerHTML=f.slice(0,50).map((s,i)=>{
+    const r=i+1,rc=r===1?'r1':r===2?'r2':r===3?'r3':'ro';
+    return`<tr><td><span class="rb ${rc}">${r}</span></td><td><strong>${esc(s.player||'Unknown')}</strong></td><td>${em[s.game]||'🎮'} ${cap(s.game)}</td><td class="sh">${s.score?.toLocaleString()}</td><td style="color:var(--t2);font-size:.78rem">…${(s.device||'—').slice(-5)}</td><td style="color:var(--t2);font-size:.78rem">${ta(s.timestamp)}</td></tr>`;
+  }).join('');
+}
+function lbErr(){document.getElementById('lbb').innerHTML='<tr class="lr"><td colspan="6">⚠️ Connection error</td></tr>';}
+function flb(f,btn){curFil=f;document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');renderLB(allSc,f);}
+
+/* ═══ AUTH ═══ */
+async function doLogin(){
+  if(!fbOk)return;
+  const{auth,signInWithEmailAndPassword}=window._fb;
+  const em=document.getElementById('le').value.trim(),pw=document.getElementById('lp').value;
+  const err=document.getElementById('lerr');err.style.display='none';
+  try{await signInWithEmailAndPassword(auth,em,pw);closeM('lm');}
+  catch(e){err.textContent='❌ '+fe(e.code);err.style.display='block';}
+}
+async function doReg(){
+  if(!fbOk)return;
+  const{auth,db,createUserWithEmailAndPassword,dbRef,set,updateProfile}=window._fb;
+  const un=document.getElementById('ru').value.trim(),em=document.getElementById('re').value.trim(),pw=document.getElementById('rp').value;
+  const err=document.getElementById('rerr'),ok=document.getElementById('rok');
+  err.style.display='none';ok.style.display='none';
+  if(!un||un.length<2){err.textContent='❌ Username must be at least 2 characters';err.style.display='block';return;}
+  try{
+    const cr=await createUserWithEmailAndPassword(auth,em,pw);
+    await set(dbRef(db,'users/'+cr.user.uid),{username:un,email:em,createdAt:Date.now()});
+    await updateProfile(cr.user,{displayName:un});
+    ok.style.display='block';
+    setTimeout(()=>closeM('rm'),1800);
+  }catch(e){err.textContent='❌ '+fe(e.code);err.style.display='block';}
+}
+async function doLogout(){if(fbOk)await window._fb.signOut(window._fb.auth);}
+function fe(code){return({'auth/invalid-email':'Invalid email','auth/user-not-found':'No account found','auth/wrong-password':'Wrong password','auth/invalid-credential':'Wrong email or password','auth/email-already-in-use':'Email already registered','auth/weak-password':'Password must be 6+ characters','auth/too-many-requests':'Too many attempts, try later'}[code]||code);}
+
+/* ═══ MODALS ═══ */
+function openM(id){document.getElementById(id).classList.add('active');}
+function closeM(id){document.getElementById(id).classList.remove('active');}
+function swM(a,b){closeM(a);setTimeout(()=>openM(b),200);}
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeM(m.id);}));
+
+/* ═══ ROOM ═══ */
+function genCode(){return Array.from({length:4},()=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random()*36)]).join('');}
+function newRc(){document.getElementById('rc').textContent=genCode();}
+function cpRc(){navigator.clipboard.writeText(document.getElementById('rc').textContent).then(()=>{const b=document.querySelector('.cbtn');b.textContent='✅ Copied!';setTimeout(()=>b.textContent='📋 Copy',2000);});}
+function invP(){const code=document.getElementById('rc').textContent;if(navigator.share)navigator.share({title:'NanoPlay',text:`Join! Code: ${code}`,url:location.href});else{cpRc();alert('Code: '+code);}}
+function stCh(){alert('🏁 Select the same game on all ESP32 devices. Highest score wins!');}
+
+/* ═══ UTILS ═══ */
+function go(id){document.getElementById(id)?.scrollIntoView({behavior:'smooth'});}
+function ta(ts){if(!ts)return'—';const d=Date.now()-ts;if(d<60000)return'Just now';if(d<3600000)return Math.floor(d/60000)+'m ago';if(d<86400000)return Math.floor(d/3600000)+'h ago';return Math.floor(d/86400000)+'d ago';}
+function cap(s){return s?s[0].toUpperCase()+s.slice(1):'';}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+window.addEventListener('scroll',()=>{document.getElementById('mh').style.background=window.scrollY>100?'rgba(10,10,26,.97)':'';});
+
+/* ═══ SPLASH ═══ */
+(function(){
+  const sp=document.getElementById('splash');
+  const cols=['#00f5ff','#9d4edd','#39ff14','#fff01f','#ff006e'];
+  for(let i=0;i<14;i++){const d=document.createElement('div');d.className='sdot';const sz=Math.random()*6+3;d.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*90+5}%;top:${Math.random()*80+10}%;background:${cols[Math.floor(Math.random()*cols.length)]};animation-duration:${Math.random()*3+2}s;animation-delay:${Math.random()*2}s;`;sp.appendChild(d);}
+  setTimeout(()=>{sp.classList.add('hide');setTimeout(()=>sp.remove(),800);},2600);
+})();
+
+/* ═══ INIT ═══ */
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('rc').textContent=genCode();
+  initPv();requestAnimationFrame(animPv);
+  // Hero particles
+  for(let i=0;i<18;i++){const p=document.createElement('div');p.className='fp';p.style.cssText=`left:${Math.random()*100}%;width:${Math.random()*4+2}px;height:${Math.random()*4+2}px;animation-duration:${Math.random()*15+8}s;animation-delay:${Math.random()*10}s;background:${['#00f5ff','#9d4edd','#39ff14','#fff01f'][Math.floor(Math.random()*4)]};`;document.querySelector('.hero').appendChild(p);}
+  setTimeout(()=>{if(!fbOk)lbErr();},6000);
+});
+</script>
+</body>
+</html>
