@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NanoPlay IoT — ESP32 Gaming Console</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, onValue, query, orderByChild, limitToLast, push, set, get }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+             signOut, onAuthStateChanged, updateProfile }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey:            "AIzaSyBa6WnpfRgRsswU2eRS3l1uUoHnG7s29bs",
+      authDomain:        "nano-77265.firebaseapp.com",
+      databaseURL:       "https://nano-77265-default-rtdb.firebaseio.com",
+      projectId:         "nano-77265",
+      storageBucket:     "nano-77265.firebasestorage.app",
+      messagingSenderId: "655059507386",
+      appId:             "1:655059507386:web:03aab2b8c413c3a0458a83",
+      measurementId:     "G-YW7GBKC8QW"
+    };
+
+    const app  = initializeApp(firebaseConfig);
+    const db   = getDatabase(app);
+    const auth = getAuth(app);
+
+    window._fb = {
+      db, auth, ref, onValue, query, orderByChild, limitToLast, push, set, get,
+      signInWithEmailAndPassword, createUserWithEmailAndPassword,
+      signOut, onAuthStateChanged, updateProfile
+    };
+    window.dispatchEvent(new Event('firebase-ready'));
+  </script>
+
+  <style>
+    :root {
+      --neon-purple:#9d4edd; --neon-blue:#00f5ff; --neon-pink:#ff006e;
+      --neon-green:#39ff14;  --neon-orange:#ff9e00; --neon-yellow:#fff01f;
+      --dark-bg:#0a0a1a; --darker-bg:#050510; --card-bg:#1a1a3a;
+      --text-primary:#fff;   --text-secondary:#b8b8d0;
+    }
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+    html{scroll-behavior:smooth;}
+    body{font-family:'Rajdhani',sans-serif;background:var(--dark-bg);color:var(--text-primary);overflow-x:hidden;line-height:1.6;}
+    body::before{content:"";position:fixed;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.12) 1px,transparent 2px);pointer-events:none;z-index:9999;}
+    ::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-track{background:var(--darker-bg);}::-webkit-scrollbar-thumb{background:var(--neon-purple);border-radius:3px;}
+
+    /* ── SPLASH ── */
+    #splashScreen{position:fixed;inset:0;z-index:99999;background:var(--darker-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .7s,visibility .7s;}
+    #splashScreen.hide{opacity:0;visibility:hidden;pointer-events:none;}
+    #splashScreen::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.15) 1px,transparent 2px);pointer-events:none;}
+    #splashScreen::after{content:"";position:absolute;inset:20px;border:1px solid rgba(157,78,221,.2);border-radius:8px;pointer-events:none;}
+    .splash-corner{position:absolute;width:20px;height:20px;border-color:var(--neon-purple);border-style:solid;}
+    .splash-corner.tl{top:24px;left:24px;border-width:2px 0 0 2px;}
+    .splash-corner.tr{top:24px;right:24px;border-width:2px 2px 0 0;}
+    .splash-corner.bl{bottom:24px;left:24px;border-width:0 0 2px 2px;}
+    .splash-corner.br{bottom:24px;right:24px;border-width:0 2px 2px 0;}
+    .splash-row{display:flex;align-items:center;gap:18px;animation:popIn .7s cubic-bezier(.34,1.56,.64,1) both;}
+    .splash-logo{height:72px;width:auto;object-fit:contain;filter:drop-shadow(0 0 20px var(--neon-purple));}
+    .splash-title{font-family:'Press Start 2P',cursive;font-size:1.9rem;font-weight:900;background:linear-gradient(90deg,var(--neon-blue),var(--neon-pink),var(--neon-purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+    .splash-sub{font-family:'Orbitron',sans-serif;font-size:.72rem;color:var(--text-secondary);letter-spacing:4px;text-transform:uppercase;margin-top:.6rem;animation:fadeUp .6s .4s ease both;}
+    .splash-bar-wrap{width:220px;height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;margin-top:1rem;animation:fadeUp .4s .5s ease both;}
+    .splash-bar{height:100%;width:0;background:linear-gradient(90deg,var(--neon-blue),var(--neon-purple));border-radius:3px;animation:barFill 2s .4s ease forwards;}
+    .splash-team{font-family:'Orbitron',sans-serif;font-size:.62rem;color:var(--neon-purple);letter-spacing:2px;margin-top:1rem;animation:fadeUp .6s .7s ease both;}
+    .splash-dot{position:absolute;border-radius:50%;opacity:.4;animation:dotFloat linear infinite;}
+    @keyframes popIn{from{opacity:0;transform:scale(.5) rotate(-10deg);}to{opacity:1;transform:scale(1) rotate(0);}}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+    @keyframes barFill{to{width:100%;}}
+    @keyframes dotFloat{0%{transform:translateY(0) scale(1);opacity:.4;}50%{transform:translateY(-30px) scale(1.3);opacity:.7;}100%{transform:translateY(0) scale(1);opacity:.4;}}
+
+    /* ── HEADER ── */
+    header{background:linear-gradient(135deg,var(--darker-bg),var(--card-bg));padding:1rem 2rem;position:fixed;width:100%;top:0;z-index:1000;border-bottom:3px solid var(--neon-purple);box-shadow:0 0 30px rgba(157,78,221,.3);transition:background .3s;}
+    .header-content{max-width:1400px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;}
+    .logo-container{display:flex;align-items:center;gap:12px;cursor:pointer;}
+    .logo-container img{height:42px;width:auto;object-fit:contain;filter:drop-shadow(0 0 8px var(--neon-purple));transition:transform .3s,filter .3s;}
+    .logo-container img:hover{transform:scale(1.1);filter:drop-shadow(0 0 16px var(--neon-blue));}
+    .brand-name{font-family:'Orbitron',sans-serif;font-size:1.7rem;font-weight:900;background:linear-gradient(90deg,var(--neon-blue),var(--neon-pink),var(--neon-purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+    nav ul{display:flex;list-style:none;gap:1.4rem;}
+    nav a{color:var(--text-primary);text-decoration:none;font-family:'Orbitron',sans-serif;font-size:.76rem;font-weight:600;padding:.4rem .85rem;border:2px solid transparent;border-radius:5px;transition:all .3s;text-transform:uppercase;letter-spacing:.5px;}
+    nav a:hover{border-color:var(--neon-blue);background:rgba(0,245,255,.08);color:var(--neon-blue);}
+    .auth-buttons{display:flex;gap:.7rem;align-items:center;}
+    #authStatus{font-family:'Orbitron',sans-serif;font-size:.72rem;color:var(--neon-green);padding:.3rem .8rem;border:1px solid var(--neon-green);border-radius:20px;display:none;}
+
+    /* ── BUTTONS ── */
+    .btn{padding:.65rem 1.4rem;border:none;border-radius:6px;font-family:'Orbitron',sans-serif;font-size:.8rem;font-weight:700;cursor:pointer;transition:all .3s;text-transform:uppercase;letter-spacing:.5px;}
+    .btn-primary{background:linear-gradient(135deg,var(--neon-purple),var(--neon-pink));color:#fff;box-shadow:0 0 18px rgba(157,78,221,.4);}
+    .btn-primary:hover{transform:translateY(-2px);box-shadow:0 0 28px rgba(157,78,221,.65);}
+    .btn-secondary{background:transparent;border:2px solid var(--neon-blue);color:var(--neon-blue);}
+    .btn-secondary:hover{background:var(--neon-blue);color:var(--dark-bg);}
+    .btn-large{padding:1rem 2.5rem;font-size:.95rem;}
+    .btn-danger{background:linear-gradient(135deg,#e63946,#c1121f);color:#fff;}
+    .btn-game{width:100%;padding:.8rem;margin-top:1rem;background:linear-gradient(135deg,var(--neon-purple),var(--neon-blue));color:#fff;border:none;border-radius:8px;font-family:'Orbitron',sans-serif;font-size:.8rem;font-weight:700;cursor:pointer;transition:all .3s;text-transform:uppercase;letter-spacing:1px;}
+    .btn-game:hover{transform:translateY(-3px);box-shadow:0 8px 25px rgba(0,245,255,.35);}
+
+    /* ── HERO ── */
+    .hero{margin-top:90px;padding:5rem 2rem;background:linear-gradient(180deg,var(--darker-bg),var(--dark-bg));text-align:center;position:relative;overflow:hidden;}
+    .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 20% 50%,rgba(157,78,221,.18) 0%,transparent 50%),radial-gradient(circle at 80% 50%,rgba(0,245,255,.18) 0%,transparent 50%);}
+    .hero-particle{position:absolute;width:4px;height:4px;border-radius:50%;animation:floatP linear infinite;opacity:.5;}
+    @keyframes floatP{0%{transform:translateY(100vh);opacity:0;}10%{opacity:.6;}90%{opacity:.4;}100%{transform:translateY(-20px) translateX(40px);opacity:0;}}
+    .hero-content{position:relative;z-index:1;max-width:1000px;margin:0 auto;}
+    .hero h1{font-family:'Press Start 2P',cursive;font-size:2.1rem;margin-bottom:1.5rem;color:var(--neon-yellow);text-shadow:4px 4px 0 var(--neon-pink),0 0 40px rgba(255,240,31,.5);line-height:1.5;animation:heroGlow 3s ease-in-out infinite;}
+    @keyframes heroGlow{0%,100%{text-shadow:4px 4px 0 var(--neon-pink),0 0 30px rgba(255,240,31,.4);}50%{text-shadow:4px 4px 0 var(--neon-pink),0 0 60px rgba(255,240,31,.8);}}
+    .hero p{font-size:1.2rem;color:var(--text-secondary);margin-bottom:2rem;max-width:680px;margin-inline:auto;}
+    .stats-container{display:flex;justify-content:center;gap:2.5rem;margin:3rem 0;flex-wrap:wrap;}
+    .stat-box{background:var(--card-bg);padding:1.4rem 2.2rem;border-radius:12px;border:2px solid var(--neon-purple);box-shadow:0 0 22px rgba(157,78,221,.28);transition:transform .3s;}
+    .stat-box:hover{transform:translateY(-4px);}
+    .stat-number{font-family:'Orbitron',sans-serif;font-size:2.2rem;font-weight:900;color:var(--neon-blue);display:block;}
+    .stat-label{font-size:.85rem;color:var(--text-secondary);text-transform:uppercase;letter-spacing:2px;}
+    .hero-buttons{display:flex;justify-content:center;gap:1.5rem;flex-wrap:wrap;}
+
+    /* ── SECTIONS ── */
+    .section-title{font-family:'Press Start 2P',cursive;font-size:1.5rem;text-align:center;margin-bottom:.8rem;color:var(--neon-green);text-shadow:0 0 20px rgba(57,255,20,.5);}
+    .section-subtitle{text-align:center;color:var(--text-secondary);margin-bottom:3rem;font-size:1.05rem;}
+
+    /* ── GAMES ── */
+    .games-section{padding:5rem 2rem;background:var(--dark-bg);}
+    .games-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:2rem;max-width:1400px;margin:0 auto;}
+    .game-card{background:var(--card-bg);border-radius:16px;overflow:hidden;border:2px solid rgba(255,255,255,.06);transition:all .4s;position:relative;cursor:pointer;}
+    .game-card::before{content:"";position:absolute;inset:0;opacity:0;transition:opacity .4s;background:linear-gradient(135deg,rgba(0,245,255,.06),rgba(157,78,221,.06));pointer-events:none;z-index:0;}
+    .game-card:hover{transform:translateY(-10px);}
+    .game-card:hover::before{opacity:1;}
+    .game-card.flappy{--cc:var(--neon-green);}.game-card.pong{--cc:var(--neon-pink);}
+    .game-card.dino{--cc:var(--neon-orange);}.game-card.space{--cc:var(--neon-purple);}
+    .game-card.maze{--cc:var(--neon-yellow);}.game-card.breakout{--cc:var(--neon-blue);}
+    .game-card:hover{border-color:var(--cc,var(--neon-blue));box-shadow:0 20px 50px rgba(0,0,0,.5),0 0 40px color-mix(in srgb,var(--cc,var(--neon-blue)) 30%,transparent);}
+    .game-preview{height:170px;position:relative;overflow:hidden;background:var(--darker-bg);display:flex;align-items:center;justify-content:center;}
+    .game-preview canvas{display:block;image-rendering:pixelated;}
+    .game-preview-label{position:absolute;bottom:8px;right:10px;font-family:'Press Start 2P',cursive;font-size:.5rem;color:rgba(255,255,255,.3);}
+    .preview-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);opacity:0;transition:opacity .3s;font-family:'Press Start 2P',cursive;font-size:.6rem;color:var(--neon-blue);letter-spacing:1px;}
+    .game-card:hover .preview-overlay{opacity:1;}
+    .game-info{padding:1.4rem;position:relative;z-index:1;}
+    .game-title{font-family:'Orbitron',sans-serif;font-size:1.2rem;font-weight:700;margin-bottom:.4rem;}
+    .game-description{color:var(--text-secondary);font-size:.92rem;margin-bottom:.9rem;line-height:1.5;}
+    .game-features{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.9rem;}
+    .feature-tag{background:rgba(157,78,221,.18);color:var(--neon-purple);padding:.25rem .65rem;border-radius:20px;font-size:.72rem;font-weight:600;border:1px solid rgba(157,78,221,.28);}
+    .game-stats{display:flex;justify-content:space-between;padding-top:.9rem;border-top:1px solid rgba(255,255,255,.08);}
+    .game-stat{text-align:center;}
+    .game-stat-value{font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:700;color:var(--neon-blue);}
+    .game-stat-label{font-size:.72rem;color:var(--text-secondary);text-transform:uppercase;}
+    .active-indicator{display:inline-flex;align-items:center;gap:5px;color:var(--neon-green);font-size:.82rem;margin-bottom:.8rem;}
+    .active-dot{width:7px;height:7px;background:var(--neon-green);border-radius:50%;animation:pulse 2s infinite;}
+
+    /* ── GAME MODAL ── */
+    .game-modal{display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,10,.92);backdrop-filter:blur(12px);align-items:center;justify-content:center;padding:1rem;}
+    .game-modal.active{display:flex;animation:modalIn .35s cubic-bezier(.34,1.56,.64,1);}
+    @keyframes modalIn{from{opacity:0;transform:scale(.88);}to{opacity:1;transform:scale(1);}}
+    .game-modal-inner{background:var(--card-bg);border-radius:22px;max-width:960px;width:100%;border:2px solid var(--gm-color,var(--neon-purple));box-shadow:0 0 60px color-mix(in srgb,var(--gm-color,var(--neon-purple)) 40%,transparent);overflow:hidden;position:relative;max-height:90vh;overflow-y:auto;}
+    .gm-header{background:linear-gradient(135deg,var(--darker-bg),var(--card-bg));padding:1.8rem 2rem 1.4rem;border-bottom:2px solid color-mix(in srgb,var(--gm-color,var(--neon-purple)) 50%,transparent);display:flex;align-items:center;justify-content:space-between;}
+    .gm-header-left{display:flex;align-items:center;gap:1rem;}
+    .gm-emoji{font-size:2.8rem;}
+    .gm-title{font-family:'Press Start 2P',cursive;font-size:1.1rem;color:var(--gm-color,var(--neon-blue));line-height:1.4;}
+    .gm-subtitle{font-size:.95rem;color:var(--text-secondary);margin-top:.3rem;}
+    .gm-close{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:var(--text-secondary);width:36px;height:36px;border-radius:50%;font-size:1.2rem;cursor:pointer;transition:all .2s;flex-shrink:0;}
+    .gm-close:hover{background:var(--neon-pink);color:#fff;}
+    .gm-body{display:grid;grid-template-columns:1fr 1fr;gap:0;}
+    @media(max-width:680px){.gm-body{grid-template-columns:1fr;}}
+    .gm-preview-pane{background:var(--darker-bg);padding:2rem;display:flex;flex-direction:column;align-items:center;gap:1rem;border-right:1px solid rgba(255,255,255,.07);}
+    .gm-canvas-wrap{border:2px solid color-mix(in srgb,var(--gm-color,var(--neon-purple)) 60%,transparent);border-radius:10px;overflow:hidden;box-shadow:0 0 30px color-mix(in srgb,var(--gm-color,var(--neon-purple)) 30%,transparent);}
+    .gm-canvas-wrap canvas{display:block;image-rendering:pixelated;}
+    .gm-screen-label{font-family:'Press Start 2P',cursive;font-size:.5rem;color:rgba(255,255,255,.3);text-align:center;}
+    .gm-oled-badge{display:inline-flex;align-items:center;gap:.4rem;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1);padding:.35rem .8rem;border-radius:20px;font-family:'Orbitron',sans-serif;font-size:.65rem;color:var(--text-secondary);}
+    .oled-dot{width:8px;height:8px;background:var(--neon-green);border-radius:50%;animation:pulse 1.5s infinite;}
+    .gm-info-pane{padding:2rem;display:flex;flex-direction:column;gap:1.4rem;}
+    .gm-section-label{font-family:'Orbitron',sans-serif;font-size:.7rem;font-weight:700;color:var(--gm-color,var(--neon-blue));text-transform:uppercase;letter-spacing:2px;margin-bottom:.5rem;}
+    .controls-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;}
+    .control-item{background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:.6rem .8rem;display:flex;align-items:center;gap:.6rem;}
+    .control-key{font-family:'Press Start 2P',cursive;font-size:.55rem;background:rgba(0,245,255,.15);color:var(--neon-blue);border:1px solid rgba(0,245,255,.3);border-radius:4px;padding:.25rem .5rem;white-space:nowrap;flex-shrink:0;}
+    .control-desc{font-size:.82rem;color:var(--text-secondary);}
+    .scoring-list{display:flex;flex-direction:column;gap:.4rem;}
+    .scoring-item{display:flex;justify-content:space-between;align-items:center;font-size:.88rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.05);}
+    .scoring-item:last-child{border-bottom:none;}
+    .scoring-val{font-family:'Orbitron',sans-serif;color:var(--neon-green);font-size:.88rem;font-weight:700;}
+    .gm-challenge-room{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:1.2rem;}
+    .room-code-mini{background:var(--darker-bg);border:2px dashed var(--neon-blue);border-radius:8px;padding:.8rem 1rem;font-family:'Press Start 2P',cursive;font-size:1rem;color:var(--neon-yellow);text-align:center;letter-spacing:6px;margin:.6rem 0;display:flex;align-items:center;justify-content:space-between;}
+    .mini-copy{background:var(--neon-blue);color:var(--dark-bg);border:none;padding:.3rem .7rem;border-radius:5px;font-family:'Orbitron',sans-serif;font-size:.6rem;font-weight:700;cursor:pointer;transition:all .2s;}
+    .mini-copy:hover{background:var(--neon-purple);color:#fff;}
+    .room-players-mini{display:flex;flex-direction:column;gap:.3rem;margin:.6rem 0;}
+    .rp-item{display:flex;align-items:center;gap:.5rem;font-size:.85rem;color:var(--text-secondary);padding:.3rem 0;}
+    .rp-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+    .rp-dot.on{background:var(--neon-green);}.rp-dot.off{background:rgba(255,255,255,.2);}
+    .rp-score{margin-left:auto;font-family:'Orbitron',sans-serif;font-size:.82rem;color:var(--neon-blue);}
+    .gm-footer-btns{display:flex;gap:.8rem;flex-wrap:wrap;}
+    .gm-footer-btns .btn{flex:1;min-width:120px;padding:.75rem .5rem;font-size:.72rem;}
+
+    /* ── LEADERBOARD ── */
+    .leaderboard-section{padding:5rem 2rem;background:var(--dark-bg);}
+    .leaderboard-container{max-width:1000px;margin:0 auto;}
+    .leaderboard-filters{display:flex;justify-content:center;gap:.8rem;margin-bottom:2rem;flex-wrap:wrap;}
+    .filter-btn{background:transparent;border:2px solid var(--neon-purple);color:var(--text-primary);padding:.45rem 1.2rem;border-radius:25px;font-family:'Orbitron',sans-serif;font-size:.78rem;cursor:pointer;transition:all .3s;}
+    .filter-btn.active,.filter-btn:hover{background:var(--neon-purple);border-color:var(--neon-purple);}
+    .leaderboard-table{width:100%;background:var(--card-bg);border-radius:15px;overflow:hidden;border:2px solid var(--neon-blue);border-collapse:collapse;}
+    .leaderboard-table th,.leaderboard-table td{padding:.9rem 1rem;text-align:left;border-bottom:1px solid rgba(255,255,255,.08);}
+    .leaderboard-table th{background:var(--darker-bg);font-family:'Orbitron',sans-serif;font-size:.8rem;text-transform:uppercase;letter-spacing:1px;color:var(--neon-blue);}
+    .leaderboard-table tr:hover{background:rgba(157,78,221,.1);}
+    .rank-badge{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-family:'Orbitron',sans-serif;font-weight:700;font-size:.85rem;}
+    .rank-1{background:linear-gradient(135deg,#ffd700,#ffaa00);color:#000;}
+    .rank-2{background:linear-gradient(135deg,#c0c0c0,#a0a0a0);color:#000;}
+    .rank-3{background:linear-gradient(135deg,#cd7f32,#a0522d);color:#fff;}
+    .rank-other{background:var(--neon-purple);color:#fff;}
+    .score-highlight{color:var(--neon-green);font-weight:700;font-family:'Orbitron',sans-serif;}
+    .loading-row td{text-align:center;color:var(--text-secondary);padding:2rem;}
+
+    /* ── MULTIPLAYER ── */
+    .multiplayer-section{padding:5rem 2rem;background:linear-gradient(180deg,var(--dark-bg),var(--darker-bg));}
+    .room-container{max-width:760px;margin:0 auto;background:var(--card-bg);border-radius:20px;padding:2.5rem;border:3px solid var(--neon-purple);box-shadow:0 0 40px rgba(157,78,221,.3);}
+    .room-header{text-align:center;margin-bottom:2rem;}
+    .room-code-display{background:var(--darker-bg);padding:1.4rem;border-radius:10px;font-family:'Press Start 2P',cursive;font-size:1.4rem;color:var(--neon-yellow);text-align:center;margin:1.4rem 0;border:2px dashed var(--neon-blue);letter-spacing:5px;display:flex;align-items:center;justify-content:center;gap:1rem;}
+    .copy-btn{background:var(--neon-blue);color:var(--dark-bg);padding:.4rem 1rem;border:none;border-radius:5px;font-family:'Orbitron',sans-serif;font-weight:700;cursor:pointer;transition:all .3s;font-size:.65rem;}
+    .copy-btn:hover{background:var(--neon-purple);color:#fff;}
+    .players-list{background:var(--darker-bg);border-radius:10px;padding:1.4rem;margin:1.4rem 0;}
+    .player-item{display:flex;justify-content:space-between;align-items:center;padding:.65rem 0;border-bottom:1px solid rgba(255,255,255,.08);}
+    .player-item:last-child{border-bottom:none;}
+    .player-status{width:9px;height:9px;border-radius:50%;background:var(--neon-green);display:inline-block;margin-right:7px;}
+    .player-status.offline{background:var(--text-secondary);}
+    .room-actions{display:flex;gap:1rem;justify-content:center;margin-top:2rem;flex-wrap:wrap;}
+
+    /* ── SETUP ── */
+    .setup-section{padding:5rem 2rem;background:var(--darker-bg);}
+    .setup-guide{background:linear-gradient(135deg,rgba(0,245,255,.06),rgba(157,78,221,.06));border:2px solid var(--neon-blue);border-radius:15px;padding:2rem;margin:0 auto;max-width:800px;}
+    .setup-guide h3{font-family:'Orbitron',sans-serif;color:var(--neon-blue);margin-bottom:1rem;}
+    .setup-guide code{background:var(--darker-bg);color:var(--neon-green);padding:.18rem .5rem;border-radius:4px;font-size:.82rem;font-family:monospace;}
+    .setup-guide ol{padding-left:1.5rem;color:var(--text-secondary);line-height:2.2;}
+
+    /* ── SPECS ── */
+    .specs-section{padding:5rem 2rem;background:linear-gradient(180deg,var(--darker-bg),var(--dark-bg));}
+    .specs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.8rem;max-width:1200px;margin:0 auto;}
+    .spec-card{background:var(--card-bg);padding:1.8rem;border-radius:15px;text-align:center;border:2px solid var(--neon-purple);transition:all .3s;}
+    .spec-card:hover{transform:translateY(-5px);box-shadow:0 10px 30px rgba(157,78,221,.3);}
+    .spec-icon{font-size:2.8rem;margin-bottom:.8rem;}
+    .spec-title{font-family:'Orbitron',sans-serif;font-size:1rem;margin-bottom:.4rem;color:var(--neon-blue);}
+    .spec-description{color:var(--text-secondary);font-size:.88rem;}
+
+    /* ── FOOTER ── */
+    footer{background:var(--darker-bg);padding:3rem 2rem;border-top:3px solid var(--neon-pink);}
+    .footer-content{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:2.5rem;}
+    .footer-section h3{font-family:'Orbitron',sans-serif;color:var(--neon-blue);margin-bottom:.9rem;font-size:1rem;}
+    .footer-section ul{list-style:none;}
+    .footer-section ul li{margin-bottom:.45rem;}
+    .footer-section a{color:var(--text-secondary);text-decoration:none;transition:color .3s;}
+    .footer-section a:hover{color:var(--neon-blue);}
+    .footer-bottom{text-align:center;padding-top:2rem;margin-top:2rem;border-top:1px solid rgba(255,255,255,.08);color:var(--text-secondary);font-size:.88rem;}
+
+    /* ── MODALS ── */
+    .modal{display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);align-items:center;justify-content:center;}
+    .modal.active{display:flex!important;animation:modalIn .3s ease;}
+    .modal-content{background:var(--card-bg);padding:2.5rem;border-radius:20px;max-width:420px;width:90%;border:3px solid var(--neon-purple);box-shadow:0 0 50px rgba(157,78,221,.4);position:relative;}
+    .modal-header{text-align:center;margin-bottom:1.8rem;}
+    .modal-header h2{font-family:'Orbitron',sans-serif;color:var(--neon-blue);font-size:1.4rem;}
+    .form-group{margin-bottom:1.3rem;}
+    .form-group label{display:block;margin-bottom:.4rem;color:var(--text-secondary);font-size:.88rem;}
+    .form-group input{width:100%;padding:.75rem 1rem;background:var(--darker-bg);border:2px solid var(--neon-purple);border-radius:8px;color:var(--text-primary);font-family:'Rajdhani',sans-serif;font-size:.98rem;}
+    .form-group input:focus{outline:none;border-color:var(--neon-blue);box-shadow:0 0 12px rgba(0,245,255,.25);}
+    .modal-actions{display:flex;gap:1rem;justify-content:center;margin-top:1.8rem;}
+    .close-modal{background:transparent;border:none;color:var(--text-secondary);font-size:1.4rem;cursor:pointer;position:absolute;top:1rem;right:1.4rem;transition:color .2s;}
+    .close-modal:hover{color:var(--neon-pink);}
+    .error-msg{color:var(--neon-pink);font-size:.83rem;margin-top:.5rem;display:none;}
+    .success-msg{color:var(--neon-green);font-size:.83rem;margin-top:.5rem;text-align:center;display:none;}
+
+    /* ── PROFILE PANEL ── */
+    #profilePanel{display:none;position:fixed;top:80px;right:20px;z-index:1500;background:var(--card-bg);border:2px solid var(--neon-purple);border-radius:16px;padding:1.5rem;min-width:250px;box-shadow:0 0 30px rgba(157,78,221,.4);animation:modalIn .3s ease;}
+    #profilePanel h3{font-family:'Orbitron',sans-serif;color:var(--neon-blue);font-size:1rem;margin-bottom:1rem;text-align:center;}
+    .profile-stat{display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.08);font-size:.9rem;}
+    .profile-stat:last-child{border-bottom:none;}
+    .profile-stat-label{color:var(--text-secondary);}
+    .profile-stat-val{color:var(--neon-green);font-family:'Orbitron',sans-serif;font-weight:700;}
+
+    /* ── ANIMATIONS ── */
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+    @keyframes glow{0%,100%{box-shadow:0 0 18px rgba(157,78,221,.35)}50%{box-shadow:0 0 38px rgba(157,78,221,.65)}}
+    @keyframes slideIn{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+    .glowing{animation:glow 2.2s infinite;}
+    .animate-in{animation:slideIn .55s ease both;}
+
+    /* ── RESPONSIVE ── */
+    @media(max-width:900px){.header-content{flex-wrap:wrap;gap:.8rem;}nav ul{flex-wrap:wrap;justify-content:center;gap:.6rem;}.hero h1{font-size:1.4rem;}}
+    @media(max-width:600px){.room-code-display{font-size:1rem;flex-direction:column;gap:.5rem;}.gm-footer-btns .btn{font-size:.65rem;}}
+  </style>
+</head>
+<body>
+
+<!-- ═══════════ SPLASH ═══════════ -->
+<div id="splashScreen">
+  <div class="splash-corner tl"></div><div class="splash-corner tr"></div>
+  <div class="splash-corner bl"></div><div class="splash-corner br"></div>
+  <div class="splash-row">
+    <img src="logo.png" alt="NanoPlay" class="splash-logo" onerror="this.style.display='none'">
+    <div class="splash-title">NanoPlay IoT</div>
+  </div>
+  <div class="splash-sub">ESP32 Gaming Console</div>
+  <div class="splash-bar-wrap"><div class="splash-bar"></div></div>
+  <div class="splash-team">microbots · Group 6 · HMK AI Club</div>
+</div>
+
+<!-- particles -->
+<script>
+  for(let i=0;i<18;i++){const p=document.createElement('div');p.className='hero-particle';p.style.cssText=`left:${Math.random()*100}%;width:${Math.random()*4+2}px;height:${Math.random()*4+2}px;animation-duration:${Math.random()*15+8}s;animation-delay:${Math.random()*10}s;background:${['#00f5ff','#9d4edd','#39ff14','#fff01f'][Math.floor(Math.random()*4)]};`;document.body.appendChild(p);}
+</script>
+
+<!-- ═══════════ HEADER ═══════════ -->
+<header id="mainHeader">
+  <div class="header-content">
+    <div class="logo-container" onclick="scrollToSection('home')">
+      <img src="logo.png" alt="NanoPlay" onerror="this.style.display='none'">
+      <span class="brand-name">NanoPlay IoT</span>
+    </div>
+    <nav><ul>
+      <li><a href="#home">Home</a></li>
+      <li><a href="#games">Games</a></li>
+      <li><a href="#leaderboard">Leaderboard</a></li>
+      <li><a href="#multiplayer">Multiplayer</a></li>
+      <li><a href="#setup">Setup</a></li>
+      <li><a href="#specs">Specs</a></li>
+    </ul></nav>
+    <div class="auth-buttons">
+      <span id="authStatus" onclick="toggleProfile()" style="cursor:pointer"></span>
+      <button class="btn btn-secondary" id="btnLogin"  onclick="openModal('loginModal')">Login</button>
+      <button class="btn btn-primary"   id="btnSignup" onclick="openModal('registerModal')">Sign Up</button>
+      <button class="btn btn-danger"    id="btnLogout" onclick="doLogout()" style="display:none">Logout</button>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════ PROFILE PANEL ═══════════ -->
+<div id="profilePanel">
+  <h3>👤 My Profile</h3>
+  <div class="profile-stat"><span class="profile-stat-label">Username</span><span class="profile-stat-val" id="ppUsername">—</span></div>
+  <div class="profile-stat"><span class="profile-stat-label">My Best Score</span><span class="profile-stat-val" id="ppBest">—</span></div>
+  <div class="profile-stat"><span class="profile-stat-label">Games Played</span><span class="profile-stat-val" id="ppGames">—</span></div>
+  <div class="profile-stat"><span class="profile-stat-label">My Rank</span><span class="profile-stat-val" id="ppRank">—</span></div>
+  <div style="margin-top:1rem;display:flex;gap:.5rem;">
+    <button class="btn btn-secondary" style="flex:1;font-size:.7rem" onclick="toggleProfile()">Close</button>
+    <button class="btn btn-danger" style="flex:1;font-size:.7rem" onclick="doLogout()">Logout</button>
+  </div>
+</div>
+
+<!-- ═══════════ HERO ═══════════ -->
+<section class="hero" id="home">
+  <div class="hero-content">
+    <h1>🎮 NANOPLAY IoT CONSOLE</h1>
+    <p>6 retro games on ESP32 + OLED. Beat your friends and dominate the global leaderboard!</p>
+    <div class="stats-container">
+      <div class="stat-box"><span class="stat-number" id="statTotal">—</span><span class="stat-label">Total Scores</span></div>
+      <div class="stat-box"><span class="stat-number" id="statHigh">—</span><span class="stat-label">Highest Score</span></div>
+      <div class="stat-box"><span class="stat-number">6</span><span class="stat-label">Games</span></div>
+    </div>
+    <div class="hero-buttons">
+      <button class="btn btn-primary btn-large glowing" onclick="scrollToSection('leaderboard')">🏆 Leaderboard</button>
+      <button class="btn btn-secondary btn-large" onclick="scrollToSection('games')">🕹️ Play Now</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ GAMES ═══════════ -->
+<section class="games-section" id="games">
+  <h2 class="section-title">🕹️ CHOOSE YOUR GAME</h2>
+  <p class="section-subtitle">Click any game to see how it works and start a challenge!</p>
+  <div class="games-grid">
+    <div class="game-card flappy animate-in" onclick="openGameModal('flappy')" style="animation-delay:.0s">
+      <div class="game-preview"><canvas id="prev-flappy" width="256" height="128"></canvas><div class="preview-overlay">▶ VIEW &amp; CHALLENGE</div><span class="game-preview-label">OLED PREVIEW</span></div>
+      <div class="game-info">
+        <div class="active-indicator"><span class="active-dot"></span>Flappy Bird</div>
+        <h3 class="game-title">Flappy Bird</h3>
+        <p class="game-description">Navigate through pipes. Speed increases as you score!</p>
+        <div class="game-features"><span class="feature-tag">Endless</span><span class="feature-tag">Speed Up</span><span class="feature-tag">Cloud Scores</span></div>
+        <div class="game-stats">
+          <div class="game-stat"><span class="game-stat-value" id="rec-flappy">—</span><span class="game-stat-label">Record</span></div>
+          <div class="game-stat"><span class="game-stat-value">A/D</span><span class="game-stat-label">Jump</span></div>
+          <div class="game-stat"><span class="game-stat-value">∞</span><span class="game-stat-label">Levels</span></div>
+        </div>
+        <button class="btn-game">🏁 Open Challenge Room</button>
+      </div>
+    </div>
+
+    <div class="game-card pong animate-in" onclick="openGameModal('pong')" style="animation-delay:.08s">
+      <div class="game-preview"><canvas id="prev-pong" width="256" height="128"></canvas><div class="preview-overlay">▶ VIEW &amp; CHALLENGE</div><span class="game-preview-label">OLED PREVIEW</span></div>
+      <div class="game-info">
+        <div class="active-indicator"><span class="active-dot"></span>Pong</div>
+        <h3 class="game-title">Pong</h3>
+        <p class="game-description">Classic paddle battle vs AI. First to 7 wins!</p>
+        <div class="game-features"><span class="feature-tag">AI Opponent</span><span class="feature-tag">First to 7</span><span class="feature-tag">Speed Ball</span></div>
+        <div class="game-stats">
+          <div class="game-stat"><span class="game-stat-value" id="rec-pong">—</span><span class="game-stat-label">Record</span></div>
+          <div class="game-stat"><span class="game-stat-value">A/B</span><span class="game-stat-label">Paddle</span></div>
+          <div class="game-stat"><span class="game-stat-value">7</span><span class="game-stat-label">Win</span></div>
+        </div>
+        <button class="btn-game">🏁 Open Challenge Room</button>
+      </div>
+    </div>
+
+    <div class="game-card dino animate-in" onclick="openGameModal('dino')" style="animation-delay:.16s">
+      <div class="game-preview"><canvas id="prev-dino" width="256" height="128"></canvas><div class="preview-overlay">▶ VIEW &amp; CHALLENGE</div><span class="game-preview-label">OLED PREVIEW</span></div>
+      <div class="game-info">
+        <div class="active-indicator"><span class="active-dot"></span>Dino Run</div>
+        <h3 class="game-title">Dino Run</h3>
+        <p class="game-description">Jump over cacti as speed climbs 4→9!</p>
+        <div class="game-features"><span class="feature-tag">Endless Runner</span><span class="feature-tag">Speed 4→9</span><span class="feature-tag">Obstacles</span></div>
+        <div class="game-stats">
+          <div class="game-stat"><span class="game-stat-value" id="rec-dino">—</span><span class="game-stat-label">Record</span></div>
+          <div class="game-stat"><span class="game-stat-value">A</span><span class="game-stat-label">Jump</span></div>
+          <div class="game-stat"><span class="game-stat-value">4→9</span><span class="game-stat-label">Speed</span></div>
+        </div>
+        <button class="btn-game">🏁 Open Challenge Room</button>
+      </div>
+    </div>
+
+    <div class="game-card space animate-in" onclick="openGameModal('space')" style="animation-delay:.24s">
+      <div class="game-preview"><canvas id="prev-space" width="256" height="128"></canvas><div class="preview-overlay">▶ VIEW &amp; CHALLENGE</div><span class="game-preview-label">OLED PREVIEW</span></div>
+      <div class="game-info">
+        <div class="active-indicator"><span class="active-dot"></span>Space Shooter</div>
+        <h3 class="game-title">Space Shooter</h3>
+        <p class="game-description">Destroy asteroids, survive the galaxy! 10pts/hit.</p>
+        <div class="game-features"><span class="feature-tag">Shoot</span><span class="feature-tag">10pts/Hit</span><span class="feature-tag">Explosions</span></div>
+        <div class="game-stats">
+          <div class="game-stat"><span class="game-stat-value" id="rec-space">—</span><span class="game-stat-label">Record</span></div>
+          <div class="game-stat"><span class="game-stat-value">A/C</span><span class="game-stat-label">Move</span></div>
+          <div class="game-stat"><span class="game-stat-value">B</span><span class="game-stat-label">Fire</span></div>
+        </div>
+        <button class="btn-game">🏁 Open Challenge Room</button>
+      </div>
+    </div>
+
+    <div class="game-card maze animate-in" onclick="openGameModal('maze')" style="animation-delay:.32s">
+      <div class="game-preview"><canvas id="prev-maze" width="256" height="128"></canvas><div class="preview-overlay">▶ VIEW &amp; CHALLENGE</div><span class="game-preview-label">OLED PREVIEW</span></div>
+      <div class="game-info">
+        <div class="active-indicator"><span class="active-dot"></span>Maze Runner</div>
+        <h3 class="game-title">Maze Runner</h3>
+        <p class="game-description">Solve the maze before time runs out! 3 levels.</p>
+        <div class="game-features"><span class="feature-tag">3 Levels</span><span class="feature-tag">Timer</span><span class="feature-tag">Move Counter</span></div>
+        <div class="game-stats">
+          <div class="game-stat"><span class="game-stat-value" id="rec-maze">—</span><span class="game-stat-label">Record</span></div>
+          <div class="game-stat"><span class="game-stat-value">A/B/C</span><span class="game-stat-label">Move</span></div>
+          <div class="game-stat"><span class="game-stat-value">35-60s</span><span class="game-stat-label">Timer</span></div>
+        </div>
+        <button class="btn-game">🏁 Open Challenge Room</button>
+      </div>
+    </div>
+
+    <div class="game-card breakout animate-in" onclick="openGameModal('breakout')" style="animation-delay:.4s">
+      <div class="game-preview"><canvas id="prev-breakout" width="256" height="128"></canvas><div class="preview-overlay">▶ VIEW &amp; CHALLENGE</div><span class="game-preview-label">OLED PREVIEW</span></div>
+      <div class="game-info">
+        <div class="active-indicator"><span class="active-dot"></span>Breakout</div>
+        <h3 class="game-title">Breakout</h3>
+        <p class="game-description">Break all bricks across 10 levels!</p>
+        <div class="game-features"><span class="feature-tag">10 Levels</span><span class="feature-tag">3-5 Lives</span><span class="feature-tag">Hard Bricks</span></div>
+        <div class="game-stats">
+          <div class="game-stat"><span class="game-stat-value" id="rec-breakout">—</span><span class="game-stat-label">Record</span></div>
+          <div class="game-stat"><span class="game-stat-value">A/C</span><span class="game-stat-label">Move</span></div>
+          <div class="game-stat"><span class="game-stat-value">B</span><span class="game-stat-label">Launch</span></div>
+        </div>
+        <button class="btn-game">🏁 Open Challenge Room</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ GAME MODAL ═══════════ -->
+<div class="game-modal" id="gameModal">
+  <div class="game-modal-inner" id="gameModalInner">
+    <div class="gm-header">
+      <div class="gm-header-left">
+        <span class="gm-emoji" id="gmEmoji">🎮</span>
+        <div><div class="gm-title" id="gmTitle">Game</div><div class="gm-subtitle" id="gmSubtitle"></div></div>
+      </div>
+      <button class="gm-close" onclick="closeGameModal()">✕</button>
+    </div>
+    <div class="gm-body">
+      <div class="gm-preview-pane">
+        <div class="gm-canvas-wrap"><canvas id="gmCanvas" width="256" height="128"></canvas></div>
+        <div class="gm-oled-badge"><span class="oled-dot"></span>LIVE OLED SIMULATION</div>
+        <div class="gm-screen-label">128×64 SSD1306 OLED</div>
+      </div>
+      <div class="gm-info-pane">
+        <div><div class="gm-section-label">🎮 Controls</div><div class="controls-grid" id="gmControls"></div></div>
+        <div><div class="gm-section-label">⭐ Scoring</div><div class="scoring-list" id="gmScoring"></div></div>
+        <div>
+          <div class="gm-section-label">👥 Challenge Room</div>
+          <div class="gm-challenge-room">
+            <p style="color:var(--text-secondary);font-size:.85rem;margin-bottom:.5rem">Share code — highest score wins!</p>
+            <div class="room-code-mini"><span id="gmRoomCode">----</span><button class="mini-copy" onclick="copyGmCode()">📋</button></div>
+            <div class="room-players-mini" id="gmPlayers">
+              <div class="rp-item"><span class="rp-dot on"></span>You<span class="rp-score" id="gmYourScore">—</span></div>
+              <div class="rp-item"><span class="rp-dot off"></span>Waiting player 2…</div>
+              <div class="rp-item"><span class="rp-dot off"></span>Waiting player 3…</div>
+            </div>
+          </div>
+        </div>
+        <div class="gm-footer-btns">
+          <button class="btn btn-secondary" onclick="gmNewCode()">🔄 New Code</button>
+          <button class="btn btn-secondary" onclick="gmInvite()">📤 Invite</button>
+          <button class="btn btn-primary glowing" onclick="gmStartChallenge()">🏁 Start!</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ LEADERBOARD ═══════════ -->
+<section class="leaderboard-section" id="leaderboard">
+  <h2 class="section-title">🏆 GLOBAL LEADERBOARD</h2>
+  <p class="section-subtitle">Live scores from all ESP32 devices — synced automatically!</p>
+  <div class="leaderboard-container">
+    <div class="leaderboard-filters">
+      <button class="filter-btn active" onclick="filterLeaderboard('all',this)">All</button>
+      <button class="filter-btn" onclick="filterLeaderboard('flappy',this)">🐦 Flappy</button>
+      <button class="filter-btn" onclick="filterLeaderboard('dino',this)">🦖 Dino</button>
+      <button class="filter-btn" onclick="filterLeaderboard('space',this)">🚀 Space</button>
+      <button class="filter-btn" onclick="filterLeaderboard('pong',this)">🏓 Pong</button>
+      <button class="filter-btn" onclick="filterLeaderboard('maze',this)">🌀 Maze</button>
+      <button class="filter-btn" onclick="filterLeaderboard('breakout',this)">🧱 Breakout</button>
+    </div>
+    <table class="leaderboard-table">
+      <thead><tr><th>Rank</th><th>Player</th><th>Game</th><th>Score</th><th>Device</th><th>Time</th></tr></thead>
+      <tbody id="leaderboardBody"><tr class="loading-row"><td colspan="6">⏳ Connecting to Firebase...</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════ MULTIPLAYER ═══════════ -->
+<section class="multiplayer-section" id="multiplayer">
+  <h2 class="section-title">👥 CHALLENGE ROOM</h2>
+  <p class="section-subtitle">Create a room and compete — highest score wins!</p>
+  <div class="room-container">
+    <div class="room-header">
+      <h3 style="font-family:'Orbitron',sans-serif;color:var(--neon-blue);margin-bottom:.5rem">Challenge Room</h3>
+      <p style="color:var(--text-secondary)">Share the code with friends. Each sets the same room on their ESP32.</p>
+    </div>
+    <div class="room-code-display"><span id="roomCode">----</span><button class="copy-btn" onclick="copyRoomCode()">📋 Copy</button></div>
+    <div class="players-list">
+      <h4 style="color:var(--neon-purple);margin-bottom:1rem;font-family:'Orbitron',sans-serif">Players (<span id="playerCount">0</span>/4)</h4>
+      <div id="playersContainer"><div class="player-item"><span><span class="player-status offline"></span>Waiting for players...</span></div></div>
+    </div>
+    <div class="room-actions">
+      <button class="btn btn-secondary" onclick="newRoomCode()">🔄 New Code</button>
+      <button class="btn btn-secondary" onclick="invitePlayers()">📤 Invite</button>
+      <button class="btn btn-primary glowing" onclick="startChallenge()">🎮 Start Challenge</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ SETUP ═══════════ -->
+<section class="setup-section" id="setup">
+  <h2 class="section-title">⚡ SETUP GUIDE</h2>
+  <p class="section-subtitle">Connect your ESP32 in 3 steps</p>
+  <div class="setup-guide">
+    <h3>🔧 Connect ESP32 to this leaderboard</h3>
+    <ol>
+      <li>افتح <code>NanoPlay.ino</code> في Arduino IDE</li>
+      <li>غيّر <code>WIFI_SSID</code> و <code>WIFI_PASS</code> لشبكتك</li>
+      <li>غيّر <code>PLAYER_NAME</code> لاسمك</li>
+      <li>ارفع الكود على ESP32 وشغّل لعبة — السكور يظهر هنا تلقائياً! 🌍</li>
+    </ol>
+    <br>
+    <h3 style="color:var(--neon-green);margin-bottom:.5rem">📦 المكتبات المطلوبة</h3>
+    <p style="color:var(--text-secondary)"><code>U8g2</code> &nbsp;·&nbsp; <code>ArduinoJson v6</code> &nbsp;·&nbsp; ESP32 Arduino core</p>
+  </div>
+</section>
+
+<!-- ═══════════ SPECS ═══════════ -->
+<section class="specs-section" id="specs">
+  <h2 class="section-title">⚙️ TECH SPECS</h2>
+  <p class="section-subtitle">Built with ESP32 + Firebase + GitHub Pages</p>
+  <div class="specs-grid">
+    <div class="spec-card"><div class="spec-icon">🎛️</div><h3 class="spec-title">ESP32-WROOM-32</h3><p class="spec-description">WiFi 802.11 b/g/n · Dual-core 240MHz · 4MB Flash</p></div>
+    <div class="spec-card"><div class="spec-icon">📺</div><h3 class="spec-title">SSD1306 OLED</h3><p class="spec-description">0.96" · 128×64 pixels · I2C · Monochrome gaming graphics</p></div>
+    <div class="spec-card"><div class="spec-icon">☁️</div><h3 class="spec-title">Firebase RTDB</h3><p class="spec-description">Real-time score sync · Works from anywhere worldwide</p></div>
+    <div class="spec-card"><div class="spec-icon">🌍</div><h3 class="spec-title">GitHub Pages</h3><p class="spec-description">Free hosting · Always online · Any browser</p></div>
+    <div class="spec-card"><div class="spec-icon">🎮</div><h3 class="spec-title">4-Button Control</h3><p class="spec-description">GPIO 19(A) · 25(B) · 26(C) · 15(D)</p></div>
+    <div class="spec-card"><div class="spec-icon">🏆</div><h3 class="spec-title">6 Games</h3><p class="spec-description">Flappy · Pong · Dino · Space · Maze · Breakout</p></div>
+  </div>
+</section>
+
+<!-- ═══════════ FOOTER ═══════════ -->
+<footer id="about">
+  <div class="footer-content">
+    <div class="footer-section">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">
+        <img src="logo.png" alt="NanoPlay" style="height:40px;filter:drop-shadow(0 0 8px var(--neon-purple));" onerror="this.style.display='none'">
+        <span class="brand-name" style="font-size:1.4rem">NanoPlay</span>
+      </div>
+      <p style="color:var(--text-secondary);line-height:1.9">ESP32 gaming console with global leaderboard.<br>Built by microbots — Group 6.</p>
+    </div>
+    <div class="footer-section">
+      <h3>Quick Links</h3>
+      <ul>
+        <li><a href="#home">Home</a></li><li><a href="#games">Games</a></li>
+        <li><a href="#leaderboard">Leaderboard</a></li><li><a href="#multiplayer">Multiplayer</a></li>
+        <li><a href="#setup">Setup Guide</a></li>
+      </ul>
+    </div>
+    <div class="footer-section">
+      <h3>Games</h3>
+      <ul>
+        <li><a href="#" onclick="openGameModal('flappy');return false">🐦 Flappy Bird</a></li>
+        <li><a href="#" onclick="openGameModal('pong');return false">🏓 Pong</a></li>
+        <li><a href="#" onclick="openGameModal('dino');return false">🦖 Dino Run</a></li>
+        <li><a href="#" onclick="openGameModal('space');return false">🚀 Space Shooter</a></li>
+        <li><a href="#" onclick="openGameModal('maze');return false">🌀 Maze Runner</a></li>
+        <li><a href="#" onclick="openGameModal('breakout');return false">🧱 Breakout</a></li>
+      </ul>
+    </div>
+    <div class="footer-section">
+      <h3>Project</h3>
+      <ul>
+        <li><a href="https://github.com/abdalrahmankhalaf2003-eng/playiot" target="_blank">📂 GitHub Repo</a></li>
+        <li><a href="NanoPlay.ino" download>📥 Download .ino</a></li>
+        <li>🏫 HMK Robotic & AI Club</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">© 2026 NanoPlay IoT — microbots Group 6 — HMK Robotic and AI Club</div>
+</footer>
+
+<!-- ═══════════ LOGIN MODAL ═══════════ -->
+<div class="modal" id="loginModal">
+  <div class="modal-content">
+    <button class="close-modal" onclick="closeModal('loginModal')">✕</button>
+    <div class="modal-header"><h2>🎮 Login</h2><p style="color:var(--text-secondary);margin-top:.4rem">Access your gaming profile</p></div>
+    <div class="form-group"><label>Email</label><input type="email" id="loginEmail" placeholder="your@email.com"></div>
+    <div class="form-group"><label>Password</label><input type="password" id="loginPassword" placeholder="••••••••"></div>
+    <p class="error-msg" id="loginError"></p>
+    <div class="modal-actions"><button class="btn btn-primary btn-large" onclick="doLogin()">Login</button></div>
+    <p style="text-align:center;margin-top:1.4rem;color:var(--text-secondary)">No account? <a href="#" onclick="switchModal('loginModal','registerModal')" style="color:var(--neon-blue)">Sign Up</a></p>
+  </div>
+</div>
+
+<!-- ═══════════ REGISTER MODAL ═══════════ -->
+<div class="modal" id="registerModal">
+  <div class="modal-content">
+    <button class="close-modal" onclick="closeModal('registerModal')">✕</button>
+    <div class="modal-header"><h2>🎮 Create Account</h2><p style="color:var(--text-secondary);margin-top:.4rem">Join the NanoPlay community</p></div>
+    <div class="form-group"><label>Username (يظهر في لوحة الصدارة)</label><input type="text" id="regUsername" placeholder="YourGameName"></div>
+    <div class="form-group"><label>Email</label><input type="email" id="regEmail" placeholder="your@email.com"></div>
+    <div class="form-group"><label>Password (6 أحرف على الأقل)</label><input type="password" id="regPassword" placeholder="••••••••"></div>
+    <p class="error-msg"   id="regError"></p>
+    <p class="success-msg" id="regSuccess">✅ Account created! You can now login.</p>
+    <div class="modal-actions"><button class="btn btn-primary btn-large" onclick="doRegister()">Sign Up</button></div>
+    <p style="text-align:center;margin-top:1.4rem;color:var(--text-secondary)">Have account? <a href="#" onclick="switchModal('registerModal','loginModal')" style="color:var(--neon-blue)">Login</a></p>
+  </div>
+</div>
+
+<!-- ═══════════ JAVASCRIPT ═══════════ -->
+<script>
+/* ══════════════════════════════════════════
+   GAME DATA
+══════════════════════════════════════════ */
+const GAMES={
+  flappy:{emoji:'🐦',title:'FLAPPY BIRD',subtitle:'Endless side-scroller — avoid the pipes!',color:'#39ff14',
+    controls:[{key:'A / D',desc:'Jump'},{key:'Hold D',desc:'Menu'}],
+    scoring:[{label:'Each pipe',val:'+1 pt'},{label:'Score 5',val:'Speed up'},{label:'Saved',val:'✓ Firebase'}],draw:drawFlappy},
+  pong:{emoji:'🏓',title:'PONG',subtitle:'Classic paddle battle — first to 7!',color:'#ff006e',
+    controls:[{key:'A',desc:'Paddle UP'},{key:'B',desc:'Paddle DOWN'},{key:'A+B',desc:'Start'},{key:'Hold D',desc:'Menu'}],
+    scoring:[{label:'Ball past AI',val:'+1 pt'},{label:'First to 7',val:'🏆'},{label:'Saved',val:'✓ Firebase'}],draw:drawPong},
+  dino:{emoji:'🦖',title:'DINO RUN',subtitle:'Jump over cacti before speed kills you!',color:'#ff9e00',
+    controls:[{key:'A',desc:'Jump'},{key:'Hold D',desc:'Menu'}],
+    scoring:[{label:'Each cactus',val:'+1 pt'},{label:'Every 5 pts',val:'Speed up'},{label:'Saved',val:'✓ Firebase'}],draw:drawDino},
+  space:{emoji:'🚀',title:'SPACE SHOOTER',subtitle:'Destroy asteroids, survive the galaxy!',color:'#9d4edd',
+    controls:[{key:'A',desc:'Move LEFT'},{key:'C',desc:'Move RIGHT'},{key:'B',desc:'Fire'},{key:'Hold D',desc:'Menu'}],
+    scoring:[{label:'Each asteroid',val:'+10 pts'},{label:'Score/5',val:'Levels up'},{label:'Saved',val:'✓ Firebase'}],draw:drawSpace},
+  maze:{emoji:'🌀',title:'MAZE RUNNER',subtitle:'Solve before the timer hits zero!',color:'#fff01f',
+    controls:[{key:'A',desc:'Move UP'},{key:'B',desc:'Move DOWN'},{key:'C',desc:'Move RIGHT'},{key:'Hold D',desc:'Menu'}],
+    scoring:[{label:'Time left×10',val:'Base'},{label:'Minus moves',val:'– pts'},{label:'Saved',val:'✓ Firebase'}],draw:drawMaze},
+  breakout:{emoji:'🧱',title:'BREAKOUT',subtitle:'Break all bricks across 10 levels!',color:'#00f5ff',
+    controls:[{key:'A',desc:'Move LEFT'},{key:'C',desc:'Move RIGHT'},{key:'B',desc:'Launch'},{key:'Hold D',desc:'Menu'}],
+    scoring:[{label:'Each brick',val:'(row+1)×10×lvl'},{label:'Complete level',val:'+1 Life'},{label:'Saved',val:'✓ Firebase'}],draw:drawBreakout}
+};
+
+/* ══════════════════════════════════════════
+   CANVAS HELPERS
+══════════════════════════════════════════ */
+const S=2,PIX='#ffffff',BG='#050510';
+function px(ctx,x,y,w=1,h=1){ctx.fillRect(x*S,y*S,w*S,h*S);}
+function rect(ctx,x,y,w,h,fill=true){fill?ctx.fillRect(x*S,y*S,w*S,h*S):ctx.strokeRect(x*S+1,y*S+1,w*S-2,h*S-2);}
+function circle(ctx,x,y,r,fill=true){ctx.beginPath();ctx.arc(x*S,y*S,r*S,0,Math.PI*2);fill?ctx.fill():ctx.stroke();}
+function line(ctx,x1,y1,x2,y2){ctx.beginPath();ctx.moveTo(x1*S,y1*S);ctx.lineTo(x2*S,y2*S);ctx.stroke();}
+function txt(ctx,s,x,y,sz=4){ctx.save();ctx.font=`${sz*S}px "Press Start 2P",monospace`;ctx.fillText(s,x*S,y*S);ctx.restore();}
+
+/* ══════════════════════════════════════════
+   GAME ANIMATIONS
+══════════════════════════════════════════ */
+let flState={pipeX:96,pipeY:20,pipeX2:176,pipeY2:15,by:25,bvy:0,score:0,dead:false,t:0,deadT:0};
+function drawFlappy(ctx,dt){
+  const s=flState;s.t+=dt;
+  if(!s.dead){s.bvy+=0.5*dt/16;s.by+=s.bvy*dt/16;s.pipeX-=1.5*dt/16;s.pipeX2-=1.5*dt/16;
+    if(s.pipeX<-24){s.pipeX=128;s.pipeY=10+Math.random()*20;}
+    if(s.pipeX2<-24){s.pipeX2=128;s.pipeY2=10+Math.random()*20;s.score++;}
+    if(s.by>52||s.by<0)s.dead=true;
+    const gT=s.pipeY+40-10,gB=s.pipeY+40+20+10;
+    if(s.pipeX<37&&s.pipeX>15&&(s.by<gT||s.by>gB))s.dead=true;
+  }else{s.deadT+=dt;if(s.deadT>1800)Object.assign(s,{pipeX:96,pipeY:20,pipeX2:176,pipeY2:15,by:25,bvy:0,score:0,dead:false,deadT:0});}
+  ctx.fillStyle=BG;ctx.fillRect(0,0,256,128);ctx.fillStyle=PIX;ctx.lineWidth=S;
+  [[s.pipeX,s.pipeY],[s.pipeX2,s.pipeY2]].forEach(([px2,py2])=>{rect(ctx,px2,0,24,py2+30);rect(ctx,px2,py2+50,24,64-(py2+50));});
+  if(!s.dead){rect(ctx,20,s.by,8,7);ctx.fillStyle=BG;px(ctx,24,s.by+1);ctx.fillStyle=PIX;rect(ctx,20,s.by+3,20,2);}
+  else{ctx.fillStyle='#ff006e';txt(ctx,'GAME',36,28,6);txt(ctx,'OVER',36,42,6);}
+  ctx.fillStyle=PIX;txt(ctx,''+s.score,2,8,4);ctx.strokeStyle=PIX;rect(ctx,0,0,128,64,false);
+}
+
+let poState={pY:24,aY:24,bX:64,bY:32,bVX:1.4,bVY:0.9,pSc:0,aSc:0,t:0};
+function drawPong(ctx,dt){
+  const s=poState;s.t+=dt;s.bX+=s.bVX*dt/16;s.bY+=s.bVY*dt/16;
+  if(s.bY<0||s.bY>61)s.bVY*=-1;
+  if(s.bY>s.aY+7)s.aY+=1.2*dt/16;else if(s.bY<s.aY-1)s.aY-=1.2*dt/16;
+  s.aY=Math.max(0,Math.min(50,s.aY));
+  if(s.bX<7&&s.bY>s.pY-1&&s.bY<s.pY+15){s.bVX=Math.abs(s.bVX);s.bX=7;}
+  if(s.bX>119&&s.bY>s.aY-1&&s.bY<s.aY+15){s.bVX=-Math.abs(s.bVX);}
+  if(s.bX<0){s.aSc++;s.bX=64;s.bY=32;s.bVX=1.4;s.bVY=0.9;}
+  if(s.bX>128){s.pSc++;s.bX=64;s.bY=32;s.bVX=-1.4;s.bVY=-0.9;}
+  if(s.pSc>=7||s.aSc>=7){s.pSc=0;s.aSc=0;}
+  ctx.fillStyle=BG;ctx.fillRect(0,0,256,128);ctx.fillStyle=PIX;
+  for(let y=0;y<64;y+=4)px(ctx,64,y);
+  rect(ctx,3,s.pY,3,14);rect(ctx,122,s.aY,3,14);rect(ctx,s.bX,s.bY,3,3);
+  txt(ctx,''+s.pSc,52,10,4);txt(ctx,''+s.aSc,68,10,4);
+  ctx.strokeStyle=PIX;rect(ctx,0,0,128,64,false);
+}
+
+let diState={dy:37,vel:0,obs:110,score:0,spd:3,dead:false,t:0,anim:0,deadT:0};
+function drawDino(ctx,dt){
+  const s=diState;s.t+=dt;s.anim+=dt;
+  if(!s.dead){s.vel+=0.7*dt/16;s.dy+=s.vel*dt/16;if(s.dy>=37){s.dy=37;s.vel=0;}
+    s.obs-=s.spd*dt/16;if(s.obs<-12){s.obs=128+Math.random()*40;s.score++;if(s.score%5===0&&s.spd<7)s.spd+=.5;}
+    if(s.obs<34&&s.obs>16&&s.dy>30)s.dead=true;
+  }else{s.deadT+=dt;if(s.deadT>1800)Object.assign(s,{dy:37,vel:0,obs:110,score:0,spd:3,dead:false,deadT:0});}
+  ctx.fillStyle=BG;ctx.fillRect(0,0,256,128);ctx.fillStyle=PIX;
+  line(ctx,0,57,128,57);rect(ctx,20,s.dy,10,8);rect(ctx,22,s.dy-4,8,5);
+  if(Math.floor(s.anim/200)%2===0){rect(ctx,22,s.dy+8,3,3);rect(ctx,25,s.dy+8,3,3);}else{rect(ctx,21,s.dy+8,3,3);rect(ctx,26,s.dy+8,3,3);}
+  ctx.fillStyle=BG;px(ctx,27,s.dy-2);ctx.fillStyle=PIX;
+  rect(ctx,s.obs,39,4,18);rect(ctx,s.obs-3,44,3,5);rect(ctx,s.obs+4,46,3,4);
+  if(s.dead){ctx.fillStyle='#ff9e00';txt(ctx,'OVER',40,30,6);}
+  ctx.fillStyle=PIX;txt(ctx,''+s.score,2,8,4);ctx.strokeStyle=PIX;rect(ctx,0,0,128,64,false);
+}
+
+let spState={sx:56,bullets:[],asts:[],score:0,t:0,shotT:0};
+function drawSpace(ctx,dt){
+  const s=spState;s.t+=dt;s.shotT+=dt;
+  if(s.shotT>600){s.bullets.push({x:s.sx+8,y:48});s.shotT=0;}
+  s.sx+=Math.sin(s.t*.002)*.8;s.sx=Math.max(4,Math.min(108,s.sx));
+  s.bullets=s.bullets.filter(b=>{b.y-=5*dt/16;return b.y>0;});
+  if(Math.random()<.02)s.asts.push({x:Math.random()*118,y:-8,spd:1+Math.random()*2});
+  s.asts=s.asts.filter(a=>{a.y+=a.spd*dt/16;return a.y<70;});
+  s.bullets.forEach(b=>{s.asts.forEach((a,i)=>{if(Math.abs(b.x-a.x)<7&&Math.abs(b.y-a.y)<7){s.asts.splice(i,1);s.score+=10;b.y=-99;}});});
+  ctx.fillStyle=BG;ctx.fillRect(0,0,256,128);ctx.fillStyle=PIX;
+  for(let i=0;i<12;i++)px(ctx,(s.t/60+i*17)%128,(s.t/90+i*13)%64);
+  const sx=s.sx;ctx.beginPath();ctx.moveTo((sx+8)*S,48*S);ctx.lineTo((sx+3)*S,58*S);ctx.lineTo((sx+13)*S,58*S);ctx.closePath();ctx.fill();
+  s.bullets.forEach(b=>{rect(ctx,b.x,b.y,2,5);});
+  s.asts.forEach(a=>{circle(ctx,a.x,a.y,4);});
+  txt(ctx,''+s.score,2,8,4);ctx.strokeStyle=PIX;rect(ctx,0,0,128,64,false);
+}
+
+const MZC=12,MZR=5,MZCELL=10;
+let mzState={cells:null,px:0,py:0,t:0,moveT:0};
+function mzGen(){
+  const W=MZC,H=MZR,walls=Array.from({length:W},()=>Array.from({length:H},()=>({r:true,d:true}))),vis=Array.from({length:W},()=>new Array(H).fill(false)),stk=[[0,0]];
+  vis[0][0]=true;
+  while(stk.length){const[cx,cy]=stk[stk.length-1];const nb=[[cx+1,cy,'r'],[cx-1,cy,'lr'],[cx,cy+1,'d'],[cx,cy-1,'ud']].filter(([nx,ny])=>nx>=0&&nx<W&&ny>=0&&ny<H&&!vis[nx][ny]);
+    if(!nb.length){stk.pop();continue;}const[nx,ny,dir]=nb[Math.floor(Math.random()*nb.length)];
+    if(dir==='r')walls[cx][cy].r=false;else if(dir==='lr')walls[nx][ny].r=false;else if(dir==='d')walls[cx][cy].d=false;else walls[nx][ny].d=false;
+    vis[nx][ny]=true;stk.push([nx,ny]);}return walls;
+}
+function drawMaze(ctx,dt){
+  const s=mzState;s.t+=dt;s.moveT+=dt;if(!s.cells)s.cells=mzGen();
+  if(s.moveT>500){s.moveT=0;const dirs=[[1,0,'r'],[0,1,'d'],[-1,0,'lr'],[0,-1,'ud']].filter(([dx,dy,dir])=>{const nx=s.px+dx,ny=s.py+dy;if(nx<0||nx>=MZC||ny<0||ny>=MZR)return false;if(dir==='r')return!s.cells[s.px][s.py].r;if(dir==='lr')return!s.cells[nx][ny].r;if(dir==='d')return!s.cells[s.px][s.py].d;if(dir==='ud')return!s.cells[nx][ny].d;});if(dirs.length){const[dx,dy]=dirs[Math.floor(Math.random()*dirs.length)];s.px+=dx;s.py+=dy;}if(s.px===MZC-1&&s.py===MZR-1){s.px=0;s.py=0;s.cells=mzGen();}}
+  ctx.fillStyle=BG;ctx.fillRect(0,0,256,128);ctx.fillStyle=PIX;ctx.strokeStyle=PIX;ctx.lineWidth=S;
+  for(let x=0;x<MZC;x++)for(let y=0;y<MZR;y++){const ox=x*MZCELL+4,oy=y*MZCELL+4;if(s.cells[x][y].r)line(ctx,ox+MZCELL,oy,ox+MZCELL,oy+MZCELL);if(s.cells[x][y].d)line(ctx,ox,oy+MZCELL,ox+MZCELL,oy+MZCELL);if(x===0)line(ctx,ox,oy,ox,oy+MZCELL);if(y===0)line(ctx,ox,oy,ox+MZCELL,oy);}
+  ctx.fillStyle='#fff01f';const gx=(MZC-1)*MZCELL+4+MZCELL/2,gy=(MZR-1)*MZCELL+4+MZCELL/2;px(ctx,gx,gy-3);px(ctx,gx+1,gy-3);px(ctx,gx+2,gy-4);ctx.fillStyle=PIX;line(ctx,gx,gy-5,gx,gy);
+  ctx.fillStyle='#00f5ff';circle(ctx,s.px*MZCELL+4+MZCELL/2,s.py*MZCELL+4+MZCELL/2,2.5);
+  ctx.strokeStyle=PIX;rect(ctx,0,0,128,64,false);
+}
+
+const BRW=11,BRH=5,BRC=10,BRR=4;
+let brState={padX:50,bX:64,bY:52,bVX:1.2,bVY:-1.5,bricks:null,score:0,t:0};
+function drawBreakout(ctx,dt){
+  const s=brState;s.t+=dt;if(!s.bricks)s.bricks=Array.from({length:BRC},(_,c)=>Array.from({length:BRR},(_,r)=>r===0?2:1));
+  s.padX+=(s.bX-s.padX)*.04*dt/16;s.padX=Math.max(0,Math.min(100,s.padX));
+  s.bX+=s.bVX*dt/16;s.bY+=s.bVY*dt/16;
+  if(s.bX<2||s.bX>126)s.bVX*=-1;if(s.bY<8)s.bVY=Math.abs(s.bVY);
+  if(s.bY>60){s.bY=52;s.bX=64;s.bVX=1.2;s.bVY=-1.5;}
+  if(s.bY>52&&s.bY<58&&s.bX>s.padX&&s.bX<s.padX+28)s.bVY=-Math.abs(s.bVY);
+  for(let c=0;c<BRC;c++)for(let r=0;r<BRR;r++){if(!s.bricks[c][r])continue;const bx=c*(BRW+1)+1,by=r*(BRH+1)+9;if(s.bX>bx&&s.bX<bx+BRW&&s.bY>by&&s.bY<by+BRH){s.bricks[c][r]--;if(!s.bricks[c][r])s.score+=(BRR-r)*10;s.bVY*=-1;break;}}
+  if(s.bricks.every(col=>col.every(b=>!b))){s.bricks=Array.from({length:BRC},(_,c)=>Array.from({length:BRR},(_,r)=>r===0?2:1));s.score=0;}
+  ctx.fillStyle=BG;ctx.fillRect(0,0,256,128);ctx.fillStyle=PIX;
+  for(let c=0;c<BRC;c++)for(let r=0;r<BRR;r++){if(!s.bricks[c][r])continue;const bx=c*(BRW+1)+1,by=r*(BRH+1)+9;if(s.bricks[c][r]===2){rect(ctx,bx,by,BRW,BRH);ctx.fillStyle=BG;rect(ctx,bx+1,by+1,BRW-2,2);ctx.fillStyle=PIX;}else rect(ctx,bx,by,BRW,BRH);}
+  rect(ctx,s.padX,56,28,4);circle(ctx,s.bX,s.bY,2);
+  txt(ctx,''+s.score,2,7,4);ctx.strokeStyle=PIX;rect(ctx,0,0,128,64,false);
+}
+
+/* ══════════════════════════════════════════
+   PREVIEW CANVASES
+══════════════════════════════════════════ */
+const previewCtxs={};let lastTime=0;
+function initPreviews(){
+  ['flappy','pong','dino','space','maze','breakout'].forEach(id=>{
+    const c=document.getElementById('prev-'+id);if(!c)return;
+    const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;previewCtxs[id]=ctx;
+  });
+}
+function animatePreviews(ts){
+  const dt=Math.min(ts-lastTime,50);lastTime=ts;
+  Object.entries(previewCtxs).forEach(([id,ctx])=>GAMES[id]?.draw(ctx,dt));
+  requestAnimationFrame(animatePreviews);
+}
+
+/* ══════════════════════════════════════════
+   GAME MODAL
+══════════════════════════════════════════ */
+let gmCanvasCtx=null,gmAnimId=null,gmCurrentGame=null,gmLastTime=0;
+const gmSt={
+  flappy:{pipeX:96,pipeY:20,pipeX2:176,pipeY2:15,by:25,bvy:0,score:0,dead:false,t:0,deadT:0},
+  pong:{pY:24,aY:24,bX:64,bY:32,bVX:1.4,bVY:0.9,pSc:0,aSc:0,t:0},
+  dino:{dy:37,vel:0,obs:110,score:0,spd:3,dead:false,t:0,anim:0,deadT:0},
+  space:{sx:56,bullets:[],asts:[],score:0,t:0,shotT:0},
+  maze:{cells:null,px:0,py:0,t:0,moveT:0},
+  breakout:{padX:50,bX:64,bY:52,bVX:1.2,bVY:-1.5,bricks:null,score:0,t:0}
+};
+const drawFns={
+  flappy(ctx,dt){const o=flState;flState=gmSt.flappy;drawFlappy(ctx,dt);flState=o;},
+  pong(ctx,dt){const o=poState;poState=gmSt.pong;drawPong(ctx,dt);poState=o;},
+  dino(ctx,dt){const o=diState;diState=gmSt.dino;drawDino(ctx,dt);diState=o;},
+  space(ctx,dt){const o=spState;spState=gmSt.space;drawSpace(ctx,dt);spState=o;},
+  maze(ctx,dt){const o=mzState;mzState=gmSt.maze;drawMaze(ctx,dt);mzState=o;},
+  breakout(ctx,dt){const o=brState;brState=gmSt.breakout;drawBreakout(ctx,dt);brState=o;}
+};
+function openGameModal(gameId){
+  const g=GAMES[gameId];if(!g)return;
+  gmCurrentGame=gameId;
+  document.getElementById('gameModalInner').style.setProperty('--gm-color',g.color);
+  document.getElementById('gmEmoji').textContent=g.emoji;
+  document.getElementById('gmTitle').textContent=g.title;
+  document.getElementById('gmSubtitle').textContent=g.subtitle;
+  document.getElementById('gmControls').innerHTML=g.controls.map(c=>`<div class="control-item"><span class="control-key">${c.key}</span><span class="control-desc">${c.desc}</span></div>`).join('');
+  document.getElementById('gmScoring').innerHTML=g.scoring.map(s=>`<div class="scoring-item"><span>${s.label}</span><span class="scoring-val">${s.val}</span></div>`).join('');
+  document.getElementById('gmRoomCode').textContent=generateRoomCode();
+  const best=allScores.filter(s=>s.game===gameId)[0];
+  document.getElementById('gmYourScore').textContent=best?best.score:'—';
+  document.getElementById('gameModal').classList.add('active');
+  document.body.style.overflow='hidden';
+  const canvas=document.getElementById('gmCanvas');
+  gmCanvasCtx=canvas.getContext('2d');gmCanvasCtx.imageSmoothingEnabled=false;
+  if(gameId==='space')gmSt.space={sx:56,bullets:[],asts:[],score:0,t:0,shotT:0};
+  if(gameId==='maze')gmSt.maze={cells:null,px:0,py:0,t:0,moveT:0};
+  if(gameId==='breakout')gmSt.breakout={padX:50,bX:64,bY:52,bVX:1.2,bVY:-1.5,bricks:null,score:0,t:0};
+  gmLastTime=performance.now();
+  if(gmAnimId)cancelAnimationFrame(gmAnimId);
+  function loop(ts){const dt=Math.min(ts-gmLastTime,50);gmLastTime=ts;drawFns[gmCurrentGame]?.(gmCanvasCtx,dt);gmAnimId=requestAnimationFrame(loop);}
+  gmAnimId=requestAnimationFrame(loop);
+}
+function closeGameModal(){
+  document.getElementById('gameModal').classList.remove('active');
+  document.body.style.overflow='';
+  if(gmAnimId){cancelAnimationFrame(gmAnimId);gmAnimId=null;}
+}
+function copyGmCode(){navigator.clipboard.writeText(document.getElementById('gmRoomCode').textContent).then(()=>{const b=document.querySelector('.mini-copy');b.textContent='✅';setTimeout(()=>b.textContent='📋',2000);});}
+function gmNewCode(){document.getElementById('gmRoomCode').textContent=generateRoomCode();}
+function gmInvite(){const code=document.getElementById('gmRoomCode').textContent;if(navigator.share)navigator.share({title:'NanoPlay',text:`Join! Code: ${code}`,url:location.href});else{copyGmCode();alert('Code: '+code);}}
+function gmStartChallenge(){alert(`🏁 Select "${GAMES[gmCurrentGame]?.title}" on all ESP32 devices. Highest score wins!`);}
+document.getElementById('gameModal').addEventListener('click',e=>{if(e.target===document.getElementById('gameModal'))closeGameModal();});
+
+/* ══════════════════════════════════════════
+   FIREBASE — LEADERBOARD
+══════════════════════════════════════════ */
+let allScores=[],currentFilter='all',fbReady=false;
+
+window.addEventListener('firebase-ready',()=>{
+  fbReady=true;
+  const{auth,onAuthStateChanged}=window._fb;
+  onAuthStateChanged(auth,user=>{
+    currentUser=user;
+    document.getElementById('btnLogin').style.display  =user?'none':'inline-block';
+    document.getElementById('btnSignup').style.display =user?'none':'inline-block';
+    document.getElementById('btnLogout').style.display =user?'inline-block':'none';
+    const st=document.getElementById('authStatus');
+    if(user){
+      st.style.display='inline-block';
+      // جيب الاسم من Firebase Database
+      const{db,ref,get}=window._fb;
+      get(ref(db,'users/'+user.uid)).then(snap=>{
+        const username=snap.val()?.username||user.email.split('@')[0];
+        st.textContent='● '+username;
+        updateProfilePanel(user,username);
+      }).catch(()=>{
+        const username=user.email.split('@')[0];
+        st.textContent='● '+username;
+        updateProfilePanel(user,username);
+      });
+    } else {
+      st.style.display='none';
+      document.getElementById('profilePanel').style.display='none';
+    }
+  });
+  loadScores();
+});
+
+function updateProfilePanel(user,username){
+  document.getElementById('ppUsername').textContent=username;
+  // احسب إحصائيات اللاعب
+  const myScores=allScores.filter(s=>s.player===username);
+  document.getElementById('ppGames').textContent=myScores.length||'0';
+  document.getElementById('ppBest').textContent=myScores.length?Math.max(...myScores.map(s=>s.score)):'—';
+  const rank=allScores.findIndex(s=>s.player===username)+1;
+  document.getElementById('ppRank').textContent=rank>0?'#'+rank:'—';
+}
+
+function toggleProfile(){
+  const p=document.getElementById('profilePanel');
+  p.style.display=p.style.display==='block'?'none':'block';
+}
+
+function loadScores(){
+  const{db,ref,query,orderByChild,limitToLast,onValue}=window._fb;
+  onValue(
+    query(ref(db,'scores'),orderByChild('score'),limitToLast(100)),
+    snapshot=>{
+      allScores=[];
+      const data=snapshot.val();
+      if(data)Object.values(data).forEach(e=>allScores.push(e));
+      allScores.sort((a,b)=>b.score-a.score);
+      document.getElementById('statTotal').textContent=allScores.length||'0';
+      document.getElementById('statHigh').textContent=allScores[0]?.score||'—';
+      ['flappy','pong','dino','space','maze','breakout'].forEach(g=>{
+        const best=allScores.filter(s=>s.game===g)[0];
+        const el=document.getElementById('rec-'+g);
+        if(el)el.textContent=best?best.score:'—';
+      });
+      renderLeaderboard(allScores,currentFilter);
+    },
+    ()=>renderLeaderboardError()
+  );
+}
+
+function renderLeaderboard(scores,filter){
+  const filtered=filter==='all'?scores:scores.filter(s=>s.game===filter);
+  const tbody=document.getElementById('leaderboardBody');
+  if(!filtered.length){tbody.innerHTML='<tr class="loading-row"><td colspan="6">No scores yet — play a game on your ESP32! 🎮</td></tr>';return;}
+  const em={flappy:'🐦',pong:'🏓',dino:'🦖',space:'🚀',maze:'🌀',breakout:'🧱'};
+  tbody.innerHTML=filtered.slice(0,50).map((s,i)=>{
+    const r=i+1,rc=r===1?'rank-1':r===2?'rank-2':r===3?'rank-3':'rank-other';
+    return`<tr>
+      <td><span class="rank-badge ${rc}">${r}</span></td>
+      <td><strong>${esc(s.player||'Unknown')}</strong></td>
+      <td>${em[s.game]||'🎮'} ${cap(s.game||'—')}</td>
+      <td class="score-highlight">${(s.score||0).toLocaleString()}</td>
+      <td style="color:var(--text-secondary);font-size:.78rem">…${(s.device||'—').slice(-5)}</td>
+      <td style="color:var(--text-secondary);font-size:.78rem">${timeAgo(s.timestamp)}</td>
+    </tr>`;
+  }).join('');
+}
+function renderLeaderboardError(){document.getElementById('leaderboardBody').innerHTML='<tr class="loading-row"><td colspan="6">⚠️ خطأ في الاتصال بـ Firebase</td></tr>';}
+function filterLeaderboard(filter,btn){currentFilter=filter;document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');renderLeaderboard(allScores,filter);}
+
+/* ══════════════════════════════════════════
+   AUTH
+══════════════════════════════════════════ */
+let currentUser=null;
+async function doLogin(){
+  if(!fbReady)return;
+  const{auth,signInWithEmailAndPassword}=window._fb;
+  const email=document.getElementById('loginEmail').value.trim();
+  const pass=document.getElementById('loginPassword').value;
+  const err=document.getElementById('loginError');err.style.display='none';
+  try{await signInWithEmailAndPassword(auth,email,pass);closeModal('loginModal');}
+  catch(e){err.textContent='❌ '+friendlyErr(e.code);err.style.display='block';}
+}
+async function doRegister(){
+  if(!fbReady)return;
+  const{auth,db,createUserWithEmailAndPassword,ref,set}=window._fb;
+  const un=document.getElementById('regUsername').value.trim();
+  const em=document.getElementById('regEmail').value.trim();
+  const pw=document.getElementById('regPassword').value;
+  const err=document.getElementById('regError');const ok=document.getElementById('regSuccess');
+  err.style.display='none';ok.style.display='none';
+  if(!un){err.textContent='❌ Username مطلوب';err.style.display='block';return;}
+  try{
+    const cred=await createUserWithEmailAndPassword(auth,em,pw);
+    await set(ref(db,'users/'+cred.user.uid),{username:un,email:em,createdAt:Date.now()});
+    ok.style.display='block';
+    setTimeout(()=>closeModal('registerModal'),1800);
+  }catch(e){err.textContent='❌ '+friendlyErr(e.code);err.style.display='block';}
+}
+async function doLogout(){
+  if(fbReady)await window._fb.signOut(window._fb.auth);
+  document.getElementById('profilePanel').style.display='none';
+}
+function friendlyErr(code){
+  return({'auth/invalid-email':'Invalid email','auth/user-not-found':'No account found',
+    'auth/wrong-password':'Wrong password','auth/invalid-credential':'Wrong email or password',
+    'auth/email-already-in-use':'Email already used','auth/weak-password':'Password must be 6+ chars',
+    'auth/too-many-requests':'Too many attempts'}[code]||code);
+}
+
+/* ══════════════════════════════════════════
+   MODAL HELPERS
+══════════════════════════════════════════ */
+function openModal(id){document.getElementById(id).classList.add('active');}
+function closeModal(id){document.getElementById(id).classList.remove('active');}
+function switchModal(a,b){closeModal(a);setTimeout(()=>openModal(b),200);}
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id);}));
+document.addEventListener('click',e=>{const pp=document.getElementById('profilePanel');if(pp.style.display==='block'&&!pp.contains(e.target)&&!document.getElementById('authStatus').contains(e.target))pp.style.display='none';});
+
+/* ══════════════════════════════════════════
+   MULTIPLAYER ROOM
+══════════════════════════════════════════ */
+function generateRoomCode(){return Array.from({length:4},()=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random()*36)]).join('');}
+function newRoomCode(){document.getElementById('roomCode').textContent=generateRoomCode();}
+function copyRoomCode(){navigator.clipboard.writeText(document.getElementById('roomCode').textContent).then(()=>{const b=document.querySelector('.copy-btn');b.textContent='✅ Copied!';setTimeout(()=>b.textContent='📋 Copy',2000);});}
+function invitePlayers(){const code=document.getElementById('roomCode').textContent;if(navigator.share)navigator.share({title:'NanoPlay',text:`Join! Code: ${code}`,url:location.href});else{copyRoomCode();alert('Code: '+code);}}
+function startChallenge(){alert('🏁 Select the same game on all ESP32 devices. Highest score wins!');}
+
+/* ══════════════════════════════════════════
+   UTILS
+══════════════════════════════════════════ */
+function scrollToSection(id){document.getElementById(id)?.scrollIntoView({behavior:'smooth'});}
+function timeAgo(ts){if(!ts)return'—';const d=Date.now()-ts;if(d<60000)return'Just now';if(d<3600000)return Math.floor(d/60000)+'m ago';if(d<86400000)return Math.floor(d/3600000)+'h ago';return Math.floor(d/86400000)+'d ago';}
+function cap(s){return s?s[0].toUpperCase()+s.slice(1):'';}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+window.addEventListener('scroll',()=>{document.getElementById('mainHeader').style.background=window.scrollY>100?'rgba(10,10,26,.97)':'';});
+
+/* ══════════════════════════════════════════
+   INIT
+══════════════════════════════════════════ */
+(function(){
+  const splash=document.getElementById('splashScreen');
+  const colors=['#00f5ff','#9d4edd','#39ff14','#fff01f','#ff006e'];
+  for(let i=0;i<14;i++){const d=document.createElement('div');d.className='splash-dot';const sz=Math.random()*6+3;d.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*90+5}%;top:${Math.random()*80+10}%;background:${colors[Math.floor(Math.random()*colors.length)]};animation-duration:${Math.random()*3+2}s;animation-delay:${Math.random()*2}s;`;splash.appendChild(d);}
+  setTimeout(()=>{splash.classList.add('hide');setTimeout(()=>splash.remove(),800);},2600);
+})();
+
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('roomCode').textContent=generateRoomCode();
+  initPreviews();
+  requestAnimationFrame(animatePreviews);
+  setTimeout(()=>{if(!fbReady)renderLeaderboardError();},6000);
+});
+</script>
+</body>
+</html>
